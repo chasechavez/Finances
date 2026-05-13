@@ -1451,7 +1451,7 @@ function parseRobinhoodCSV(csvText){
   return{accountNumber:'robinhood',accountType:'Robinhood',transactions:txns};
 }
 
-function detectInvCSV(headers){
+function detectInvCSV(headers,csvText){
   const hn=headers.map(h=>h.trim().toLowerCase());
   if(hn.includes('run date')&&hn.includes('account')&&hn.includes('account number'))return'fidelityMulti';
   if(hn.includes('run date')&&hn.some(h=>h.includes('cash balance')))return'fidelityRoth';
@@ -1521,32 +1521,51 @@ function detectFromPdfText(text,filename){
 function extractAllyBalance(pdfText){const m=pdfText.match(/Ending Balance[,.]?\s*(?:as of\s+[\d\/]+\s+)?\$?([\d,]+\.\d{2})/i);return m?parseFloat(m[1].replace(/,/g,'')):null;}
 
 function parseSCCUPdf(text){
-  const results=[];const checkingTxns=[];const lines=text.split('\n');let inChecking=false;
-  for(const line of lines){
-    if(/free\s*checking\s*account\s*summary/i.test(line)){inChecking=true;continue;}
-    if(inChecking&&(/savings\s*account\s*summary|auto\s*loan\s*summary/i.test(line))){inChecking=false;continue;}
-    if(!inChecking)continue;
-    let m=line.match(/^(\d{1,2}\/\d{1,2}\/\d{2})\s+\d{1,2}\/\d{1,2}\/\d{2}\s+(.+?)\s+([-\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/);
-    if(!m)m=line.match(/^(\d{1,2}\/\d{1,2}\/\d{2}).*?\s+([-]?[\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/);
+  const results=[];
+  const lines=text.split('\n');
+  let section='none';
+  const checkingTxns=[];
+  const SKIP_DESC=[/beginning balance/i,/ending balance/i,/credit interest/i,/overdraft/i,/^total/i,/^account/i,/^days in/i,/^transaction\s*date/i,/^effective/i];
+  const INCOME_DESC=[/orlando\s*health.*payroll/i,/payroll/i,/venmo.*cashout/i,/direct.*dep/i];
+  const SKIP_SPENDING=[/capital\s*one.*crcardpmt/i,/fid\s*bkg\s*svc.*moneyline/i,/transfer\s*to/i,/transfer\s*from/i,/venmo.*payment/i,/\*1741/i];
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i].trim();
+    if(!line)continue;
+    if(/free\s*checking\s*account\s*summary/i.test(line)){section='checking';continue;}
+    if(/savings\s*account\s*summary/i.test(line)){section='savings';continue;}
+    if(/auto\s*loan.*summary/i.test(line)||/auto\s*loan.*toyota/i.test(line)){section='auto';continue;}
+    if(/overdraft\s*and\s*returned/i.test(line)||/please\s*retain/i.test(line)){section='none';continue;}
+    if(section!=='checking')continue;
+    if(SKIP_DESC.some(r=>r.test(line)))continue;
+    // Match: M/D/YY M/D/YY Description Amount Balance
+    const m=line.match(/^(\d{1,2}\/\d{1,2}\/\d{2})\s+\d{1,2}\/\d{1,2}\/\d{2}\s+(.+?)\s+([-\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/);
     if(!m)continue;
-    const[,rawDate,rest,rawAmt]=m;
-    const yy=rawDate.split('/')[2];const dateParts=rawDate.split('/');
-    const date=`${dateParts[0].padStart(2,'0')}/${dateParts[1].padStart(2,'0')}/20${yy}`;
-    const amount=parseFloat((rawAmt||rest||'0').replace(/,/g,''));
-    if(amount>=0)continue;
-    const desc=(rest||'').trim();
-    const cat=categorizeBank({description:desc,amount:Math.abs(amount),isCredit:false,hintCategory:''});
+    const[,rawDate,desc,amtStr]=m;
+    const parts=rawDate.split('/');
+    const date=parts[0].padStart(2,'0')+'/'+parts[1].padStart(2,'0')+'/20'+parts[2];
+    const amt=parseFloat(amtStr.replace(/,/g,''));
+    if(amt===0)continue;
+    if(amt>0){
+      // Deposit - check if income
+      if(INCOME_DESC.some(r=>r.test(desc))){
+        checkingTxns.push({id:Math.random().toString(36).slice(2),date,description:desc.trim(),amount:amt,isCredit:true,isBank:true,hintCategory:'',preCategory:null});
+      }
+      continue;
+    }
+    // Withdrawal
+    const absAmt=Math.abs(amt);
+    if(SKIP_SPENDING.some(r=>r.test(desc)))continue;
+    const cat=categorizeBank({description:desc.trim(),amount:absAmt,isCredit:false,hintCategory:''});
     if(cat===null)continue;
-    checkingTxns.push({id:Math.random().toString(36).slice(2),date,description:desc,amount:Math.abs(amount),isCredit:false,hintCategory:'',preCategory:cat});
+    checkingTxns.push({id:Math.random().toString(36).slice(2),date,description:desc.trim(),amount:absAmt,isCredit:false,isBank:true,hintCategory:'',preCategory:cat});
   }
   if(checkingTxns.length)results.push({cardKey:'sccuChecking',txns:checkingTxns});
-  const savM=text.match(/Savings\s+\$[\d,.]+\s+\$([\d,.]+)/i);
-  const autoM=text.match(/Auto\s*Loan.*?\$[\d,.]+\s+\$([\d,.]+)/i);
+  const autoM=text.match(/Auto\s*Loan\s*2021\s*Toyota[^\n]*\$[\d,.]+\s+\$([\d,.]+)/i);
+  const savM=text.match(/(?:^|\n)\s*Savings\s+\$[\d,.]+\s+\$([\d,.]+)/im);
   if(autoM)results.push({cardKey:'autoLoanBalance',balanceOnly:true,balance:parseFloat(autoM[1].replace(/,/g,''))});
   if(savM)results.push({cardKey:'sccuSavBalance',balanceOnly:true,balance:parseFloat(savM[1].replace(/,/g,''))});
   return results;
 }
-
 function parseKeybankCSV(csvText){
   const lines=csvText.split('\n').filter(l=>l.trim());
   const hIdx=lines.findIndex(l=>/^Date,Amount/i.test(l.trim()));
@@ -1674,8 +1693,9 @@ async function handleFiles(files){
       csvText=await file.text();
       const firstLine=csvText.replace(/^\uFEFF/,'').split('\n').find(l=>l.trim());
       const headers=firstLine?Papa.parse(firstLine).data[0]||[]:[];
-      invType=detectInvCSV(headers);
-      if(invType&&invType!=='simplifi'){detection={cardKey:'investment_'+invType,profile:null,confidence:'high',isInvestment:true,invType};}
+      invType=detectInvCSV(headers,csvText);
+      if(invType==='sccuAutoLoan'){detection={cardKey:'sccuAutoLoan',profile:null,confidence:'high',isAutoLoan:true,invType:'sccuAutoLoan'};}
+      else if(invType&&invType!=='simplifi'){detection={cardKey:'investment_'+invType,profile:null,confidence:'high',isInvestment:true,invType};}
       else if(invType==='simplifi'){detection={cardKey:'sccuChecking',profile:CARD_PROFILES.sccuChecking,confidence:'high',isBank:true,isSimplifi:true};}
       else if(/key\s*privilege\s*checking/i.test(csvText.slice(0,200))){detection={cardKey:'keybankChecking',profile:CARD_PROFILES.keybankChecking,confidence:'high',isBank:true};}
       else if(csvText.replace(/^\uFEFF/,'').trimStart().startsWith('<!DOCTYPE')){detection={cardKey:'aidvantage_csv',profile:null,confidence:'high',isLoan:true};}
@@ -1919,6 +1939,21 @@ function parseCO360Pdf(text, year) {
   return txns;
 }
 
+function parseSCCUAutoLoanCSV(csvText){
+  const cleaned=csvText.replace(/^\uFEFF/,'').trim();
+  const result=Papa.parse(cleaned,{header:true,skipEmptyLines:true});
+  const txns=[];
+  for(const row of result.data){
+    const date=(row['Date']||'').trim();
+    const amount=parseFloat((row['Amount']||'0').replace(/[,$]/g,''));
+    const memo=(row['Memo']||'').trim();
+    const account=(row['Account']||'').trim();
+    if(!date||!amount)continue;
+    const desc=memo?`Auto Loan Payment — ${memo}`:account?`Auto Loan Payment — ${account}`:'Auto Loan Payment (SCCU)';
+    txns.push({id:Math.random().toString(36).slice(2),date,description:desc,amount:Math.abs(amount),isCredit:false,isBank:false,hintCategory:'',preCategory:'Debt Payments'});
+  }
+  return txns;
+}
 async function processQueue(){
   const toProcess=uploadQueue.filter(item=>item.status==='ready');
   if(!toProcess.length){showToast('No files ready','error');return;}
@@ -1926,57 +1961,83 @@ async function processQueue(){
     item.status='processing';renderUploadQueue();
     let allTxns=[];
     try{
-      if(item.isInvestment&&item.invType&&item.csvText){const invResults=processInvCSV(item.invType,item.csvText,item.filename);item.txnCount=invResults.reduce((s,r)=>s+r.added,0);item.status='done';saveState();renderInvestmentCharts();renderUploadQueue();showToast(`Imported ${item.txnCount} investment transactions`,'success');continue;}
-      if(item.isSimplifi&&item.csvText)allTxns=parseSimplifiCSV(item.csvText).map(t=>({...t,cardKey:'sccuChecking',cardLabel:'SCCU Checking'}));
-      else if(item.cardKey==='keybankChecking'&&!item.isPdf&&item.csvText)allTxns=parseKeybankCSV(item.csvText).map(t=>({...t,cardKey:'keybankChecking',cardLabel:'Keybank Checking'}));
-      else if(item.isMulti&&item.isPdf){const results=parseSCCUPdf(item.pdfText);for(const r of results){if(r.balanceOnly){if(r.cardKey==='autoLoanBalance'&&r.balance){STATE.accounts.auto=r.balance;const el=document.getElementById('a-auto');if(el)el.value=r.balance;}if(r.cardKey==='sccuSavBalance'&&r.balance){STATE.accounts.sccuSav=r.balance;const el=document.getElementById('a-sccuSav');if(el)el.value=r.balance;}continue;}allTxns.push(...r.txns.map(t=>({...t,cardKey:r.cardKey,cardLabel:CARD_PROFILES[r.cardKey]?.label||r.cardKey})));}}
-      else if(item.balanceOnly&&item.isPdf){if(item.cardKey==='ally'){const bal=extractAllyBalance(item.pdfText);if(bal!==null){STATE.accounts.emergFund=bal;const el=document.getElementById('a-emergFund');if(el)el.value=bal;saveState();updateDashboard();renderEmergencyGauge();showToast(`Emergency fund updated: $${bal.toFixed(2)}`,'success');}}item.txnCount=0;item.status='done';renderUploadQueue();continue;}
+      // ── Investment / auto-loan CSVs ──────────────────────────────────────
+      if(item.isInvestment&&item.invType&&item.csvText){
+        const invResults=processInvCSV(item.invType,item.csvText,item.filename);
+        item.txnCount=invResults.reduce((s,r)=>s+r.added,0);
+        item.status='done';saveState();renderInvestmentCharts();renderUploadQueue();
+        showToast(`Imported ${item.txnCount} investment transactions`,'success');continue;
+      }
+      if((item.cardKey==='sccuAutoLoan'||item.invType==='sccuAutoLoan')&&item.csvText){
+        allTxns=parseSCCUAutoLoanCSV(item.csvText).map(t=>({...t,cardKey:'sccuAutoLoan',cardLabel:'SCCU Auto Loan'}));
+      }
+      // ── Simplifi / Keybank CSV ────────────────────────────────────────────
+      else if(item.isSimplifi&&item.csvText){
+        allTxns=parseSimplifiCSV(item.csvText).map(t=>({...t,cardKey:'sccuChecking',cardLabel:'SCCU Checking'}));
+      }
+      else if(item.cardKey==='keybankChecking'&&!item.isPdf&&item.csvText){
+        allTxns=parseKeybankCSV(item.csvText).map(t=>({...t,cardKey:'keybankChecking',cardLabel:'Keybank Checking'}));
+      }
+      // ── SCCU Multi-Account PDF ────────────────────────────────────────────
+      else if(item.isMulti&&item.isPdf){
+        const results=parseSCCUPdf(item.pdfText);
+        for(const r of results){
+          if(r.balanceOnly){
+            if(r.cardKey==='autoLoanBalance'&&r.balance){STATE.accounts.auto=r.balance;const el=document.getElementById('a-auto');if(el)el.value=r.balance;}
+            if(r.cardKey==='sccuSavBalance'&&r.balance){STATE.accounts.sccuSav=r.balance;const el=document.getElementById('a-sccuSav');if(el)el.value=r.balance;}
+            saveState();continue;
+          }
+          allTxns.push(...r.txns.map(t=>({...t,cardKey:r.cardKey,cardLabel:CARD_PROFILES[r.cardKey]?.label||r.cardKey})));
+        }
+      }
+      // ── Balance-only PDFs (Ally) ──────────────────────────────────────────
+      else if(item.balanceOnly&&item.isPdf){
+        if(item.cardKey==='ally'){
+          const bal=extractAllyBalance(item.pdfText);
+          if(bal!==null){STATE.accounts.emergFund=bal;const el=document.getElementById('a-emergFund');if(el)el.value=bal;saveState();updateDashboard();renderEmergencyGauge();showToast(`Emergency fund updated: $${bal.toFixed(2)}`,'success');}
+        }
+        item.txnCount=0;item.status='done';renderUploadQueue();continue;
+      }
+      // ── Capital One 360 Savings PDF ───────────────────────────────────────
       else if(item.isPdf&&item.cardKey==='co360'&&item.isBank){
-        // Capital One 360 Savings PDF — parse income deposits + CC payments
         const yearM=item.pdfText?.match(/(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
         const yr=yearM?yearM[1]:new Date().getFullYear().toString();
         const txns=parseCO360Pdf(item.pdfText||'',yr);
         allTxns=txns.map(t=>({...t,cardKey:'co360',cardLabel:'Capital One 360'}));
       }
+      // ── Capital One Venture X PDF ─────────────────────────────────────────
       else if(item.isPdf&&item.cardKey==='capitalOne'){
-        // Capital One Venture X PDF — "Mar 9 Mar 11 MERCHANT $8.94" format
         const txns=parseCapOneVenturePdf(item.pdfText||'');
         allTxns=txns.map(t=>({...t,cardKey:'capitalOne',cardLabel:'Capital One Venture X'}));
       }
+      // ── Chase / SCCU CC PDFs ──────────────────────────────────────────────
       else if(item.isPdf&&item.cardKey&&['chaseFreedom','sapphire','sccu'].includes(item.cardKey)){
-        // Chase CC PDFs — "03/17 MERCHANT 78.80" format
         const txns=parseChaseCardPdf(item.pdfText||'',item.cardKey);
         allTxns=txns.map(t=>({...t,cardKey:item.cardKey,cardLabel:item.cardProfile?.label||item.cardKey}));
       }
-      else if(!item.isPdf&&item.cardProfile&&item.csvText){allTxns=parseCSVRows(item.csvText,item.cardProfile).map(t=>({...t,cardKey:item.cardKey,cardLabel:item.cardProfile.label}));}
+      // ── Generic CC CSV ────────────────────────────────────────────────────
+      else if(!item.isPdf&&item.cardProfile&&item.csvText){
+        allTxns=parseCSVRows(item.csvText,item.cardProfile).map(t=>({...t,cardKey:item.cardKey,cardLabel:item.cardProfile.label}));
+      }
     }catch(e){item.status='error';console.error('processQueue error:',item.filename,e);renderUploadQueue();continue;}
 
+    // ── Categorize & commit ───────────────────────────────────────────────
     item.txnCount=allTxns.length;
     const threshold=STATE.settings.confidenceThreshold;
     const existingHashes=new Set(STATE.spendingHashes);
     let autoCommitted=0,needsReview=0;
     const INCOME_PATS=[
-        /payroll/i,
-        /direct[-\s]*pay/i,
-        /direct[-\s]*dep/i,
-        /orlando\s*health/i,
-        /leavitt\s*medical/i,
-        /salary|compensation/i,
-        /usf\s*(federal\s*credit\s*union|fcu)/i,
-        /preauthorized\s*(dep|credit|transfer)/i,
-        /victoria\s*dukhara/i,
-        /ach\s*credit/i,
-        /employer\s*direct/i,
-        /net\s*pay/i,
-        /deposit\s+from\s+orlando\s*health/i,
-        /deposit\s+from\s+usf\s*federal/i,
-        /deposit\s+from.*payroll/i,
-        /preauthorized\s+deposit\s+from\s+usf/i,
-      ];
+      /payroll/i,/direct[-\s]*pay/i,/direct[-\s]*dep/i,
+      /orlando\s*health/i,/leavitt\s*medical/i,/salary|compensation/i,
+      /usf\s*(federal\s*credit\s*union|fcu)/i,
+      /preauthorized\s*(dep|credit|transfer)/i,/victoria\s*dukhara/i,
+      /ach\s*credit/i,/employer\s*direct/i,/net\s*pay/i,
+      /deposit\s+from\s+orlando\s*health/i,/deposit\s+from\s+usf\s*federal/i,
+      /deposit\s+from.*payroll/i,/preauthorized\s+deposit\s+from\s+usf/i,
+    ];
     const SKIP_CREDIT_PATS=[
       /^(transfer\s*(to|from)|online\s*xfr|a2a\s*xfer)/i,
-      /interest\s*(payment|paid)/i,
-      /^moneyline\s+\d/i,
+      /interest\s*(payment|paid)/i,/^moneyline\s+\d/i,
     ];
     const isIncomeDesc=d=>INCOME_PATS.some(r=>r.test(d));
     for(const txn of allTxns){
@@ -1995,32 +2056,52 @@ async function processQueue(){
         return item.monthKey;
       })();
       const isBankItem=item.isBank||item.isSimplifi||item.cardKey==='keybankChecking'||item.cardKey==='sccuChecking'||item.cardKey==='co360';
-      if(txn.isCredit&&isBankItem){const desc=txn.description||'';if(SKIP_CREDIT_PATS.some(r=>r.test(desc)))continue;if(isIncomeDesc(desc)){if(!STATE.income)STATE.income={};if(!STATE.income[monthKey])STATE.income[monthKey]={total:0,items:[]};const ih=`income|${txn.date}|${desc.slice(0,20)}|${txn.amount}`;if(!existingHashes.has(ih)){existingHashes.add(ih);STATE.income[monthKey].total+=txn.amount;STATE.income[monthKey].items.push({date:txn.date,amount:txn.amount,desc,source:txn.cardLabel||item.cardKey});}continue;}continue;}
-      // Auto-commit if: above threshold OR matched by rules/custom (not just 'Other' guesses)
-      const autoCommit = confidence>=threshold || source==='rules' || source==='custom' || source==='hint';
-      if(autoCommit){existingHashes.add(spendHash);STATE.spendingHashes.push(spendHash);if(!STATE.spending[monthKey])STATE.spending[monthKey]={};if(!STATE.spending[monthKey][txn.cardKey])STATE.spending[monthKey][txn.cardKey]={};const cm=STATE.spending[monthKey][txn.cardKey];if(!cm[category])cm[category]=0;if(!cm._txns)cm._txns=[];cm[category]+=txn.amount;cm._txns.push({date:txn.date,desc:txn.description,amount:txn.amount,category,cardKey:txn.cardKey,cardLabel:txn.cardLabel});autoCommitted++;}
-      else{STATE.reviewQueue.push({...txn,category,confidence,source,reviewed:false,cardKey:txn.cardKey,cardLabel:txn.cardLabel,monthKey,_spendHash:spendHash});needsReview++;}
+      if(txn.isCredit&&isBankItem){
+        const desc=txn.description||'';
+        if(SKIP_CREDIT_PATS.some(r=>r.test(desc)))continue;
+        if(isIncomeDesc(desc)){
+          if(!STATE.income)STATE.income={};
+          if(!STATE.income[monthKey])STATE.income[monthKey]={total:0,items:[]};
+          const ih=`income|${txn.date}|${desc.slice(0,20)}|${txn.amount}`;
+          if(!existingHashes.has(ih)){
+            existingHashes.add(ih);
+            STATE.income[monthKey].total+=txn.amount;
+            STATE.income[monthKey].items.push({date:txn.date,amount:txn.amount,desc,source:txn.cardLabel||item.cardKey});
+          }
+          continue;
+        }
+        continue;
+      }
+      const autoCommit=confidence>=threshold||source==='rules'||source==='custom'||source==='hint';
+      if(autoCommit){
+        existingHashes.add(spendHash);STATE.spendingHashes.push(spendHash);
+        if(!STATE.spending[monthKey])STATE.spending[monthKey]={};
+        if(!STATE.spending[monthKey][txn.cardKey])STATE.spending[monthKey][txn.cardKey]={};
+        const cm=STATE.spending[monthKey][txn.cardKey];
+        if(!cm[category])cm[category]=0;if(!cm._txns)cm._txns=[];
+        cm[category]+=txn.amount;
+        cm._txns.push({date:txn.date,desc:txn.description,amount:txn.amount,category,cardKey:txn.cardKey,cardLabel:txn.cardLabel});
+        autoCommitted++;
+      }else{
+        STATE.reviewQueue.push({...txn,category,confidence,source,reviewed:false,cardKey:txn.cardKey,cardLabel:txn.cardLabel,monthKey,_spendHash:spendHash});
+        needsReview++;
+      }
     }
-    item.txnCount=autoCommitted+needsReview;item._committed=autoCommitted;item._review=needsReview;item._deduped=(allTxns.length-autoCommitted-needsReview);item.status='done';
+    item.txnCount=autoCommitted+needsReview;item._committed=autoCommitted;item._review=needsReview;
+    item._deduped=(allTxns.length-autoCommitted-needsReview);item.status='done';
   }
   saveState();renderUploadQueue();updateReviewBadge();renderReviewQueue();renderSpendingTab();updateDashboard();renderAllCharts();
   const pending=STATE.reviewQueue.filter(t=>!t.reviewed).length;
-  // Per-card debug summary in console for troubleshooting
-  const cardSummary={};
-  for(const[mk,cardData]of Object.entries(STATE.spending)){for(const[ck,cats]of Object.entries(cardData)){if(!cardSummary[ck])cardSummary[ck]={months:new Set(),txns:0};cardSummary[ck].months.add(mk);cardSummary[ck].txns+=(cats._txns||[]).length;}}
-  console.log('📊 Card Summary after import:',Object.entries(cardSummary).map(([k,v])=>`${k}: ${v.txns} txns in ${[...v.months].join(',')}`).join(' | '));
-  // Tell user which months received data
-  const affectedMonths=[...new Set(toProcess.flatMap(item=>{const months=new Set();if(item._committed>0||item._review>0){(STATE.spending?Object.keys(STATE.spending):[]).forEach(m=>months.add(m));}return[...months];}))]
-    .sort().slice(-3).map(mk=>{const[y,m]=mk.split('-').map(Number);return MONTHS[m-1]+' '+y;}).join(', ');
   const totalCommitted=toProcess.reduce((s,i)=>s+(i._committed||0),0);
   const totalDeduped=toProcess.reduce((s,i)=>s+(i._deduped||0),0);
-  const toastMsg=totalCommitted>0?`${totalCommitted} imported${totalDeduped>0?' ('+totalDeduped+' dupes skipped)':''}${pending>0?' · '+pending+' to review':''}`:(totalDeduped>0?`All ${totalDeduped} transactions already imported — check if using correct month`:'0 transactions found — check file format');
+  const toastMsg=totalCommitted>0
+    ?`${totalCommitted} imported${totalDeduped>0?' ('+totalDeduped+' dupes skipped)':''}${pending>0?' · '+pending+' to review':''}`
+    :(totalDeduped>0?`All ${totalDeduped} already imported — Settings → Reset Spending to reimport`:'0 transactions found — check card detection');
   if(pending>0){showToast(toastMsg,'success');setTimeout(()=>switchTab('review'),1200);}
   else if(totalCommitted>0){showToast(toastMsg,'success');setTimeout(()=>switchTab('spending'),1200);}
   else{showToast(toastMsg,'error');}
 }
 
-// Review
 function renderReviewQueue(){
   const container=document.getElementById('reviewQueue'),empty=document.getElementById('review-empty'),commitWrap=document.getElementById('commit-wrap');
   const pending=STATE.reviewQueue.filter(t=>!t.reviewed);
@@ -2061,7 +2142,7 @@ async function aiCategorizeAll(){
   showToast(`Sending ${pending.length} to Claude...`);
   const batch=pending.map(t=>({id:t.id,description:t.description,amount:t.amount,hint:t.hintCategory}));
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2048,system:`Categorize transactions into exactly one of: ${CATEGORIES.join(', ')}. Rules: E-PASS/CFX/SunPass->Gas/Fuel. TurboTenant->Rental Property. Return ONLY JSON array: [{"id":"...","category":"..."}]`,messages:[{role:'user',content:`Categorize: ${JSON.stringify(batch)}`}]})});
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-allow-any-cors-origin':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2048,system:`Categorize transactions into exactly one of: ${CATEGORIES.join(', ')}. Rules: E-PASS/CFX/SunPass->Gas/Fuel. TurboTenant->Rental Property. Return ONLY JSON array: [{"id":"...","category":"..."}]`,messages:[{role:'user',content:`Categorize: ${JSON.stringify(batch)}`}]})});
     const data=await resp.json();if(!resp.ok)throw new Error(data.error?.message||'API error');
     const text=data.content?.find(b=>b.type==='text')?.text||'';
     const jsonMatch=text.match(/\[[\s\S]*\]/);if(!jsonMatch)throw new Error('No JSON in response');
