@@ -1194,10 +1194,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 <!-- API Key Modal -->
 <div class="modal-overlay" id="apiKeyModal">
   <div class="modal">
-    <div class="modal-title">Claude API Key</div>
-    <div class="modal-sub">Stored only in your browser's localStorage. Sent only to Anthropic's API when categorizing. <br><br><strong style="color:var(--warn)">⚠ Must open this file via a local server (e.g. <code>python -m http.server</code>) or hosted URL — opening as <code>file://</code> will be blocked by browser CORS.</strong></div>
+    <div class="modal-title">Claude API Configuration</div>
+    <div class="modal-sub">Stored only in your browser's localStorage. <br><br><strong style="color:var(--danger)">⚠ The Anthropic API blocks direct browser calls (CORS). You must deploy a tiny proxy. See README — it takes 2 minutes.</strong></div>
     <div class="input-group"><div class="input-label">API Key (starts with sk-ant-...)</div><input class="input-field" type="password" id="apikey-input" placeholder="sk-ant-api03-..."></div>
-    <div class="modal-actions"><button class="btn btn-primary" onclick="saveApiKey()" style="flex:1">Save Key</button><button class="btn btn-ghost" onclick="closeApiKeyModal()">Cancel</button></div>
+    <div class="input-group"><div class="input-label">Proxy URL (required for GitHub Pages / hosted use)</div><input class="input-field" type="text" id="proxy-input" placeholder="https://your-worker.workers.dev"></div>
+    <div class="modal-actions"><button class="btn btn-primary" onclick="saveApiKey()" style="flex:1">Save</button><button class="btn btn-ghost" onclick="closeApiKeyModal()">Cancel</button></div>
   </div>
 </div>
 
@@ -1605,7 +1606,7 @@ function parseSimplifiCSV(csvText){
 }
 
 // STATE
-let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{},monthlyLog:{},settings:{apiKey:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};
+let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{},monthlyLog:{},settings:{apiKey:'',proxyUrl:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};
 
 const DEFAULT_ACCOUNTS={chaseGross:8207,chaseTakeHome:3553.80,chaseMatch:5,vicGross:3864.50,vicTakeHome:2000,vicMatch:2,fixedExp:3500,emergMonths:6,emergFund:1006,hsa:11883.87,hsaContrib:138.47,aidvantage:49014.99,aidvantageRate:7.1,edfinancial:136388,edfinancialRate:6.6,ecsi:52092,ecsiRate:5.0,ufcom:11060,ufcomRate:6.0,auto:12241,autoRate:6.74,furniture:2075,mortgage:250000,origMortgage:285000,mortgageRate:6.875,chase403bContrib:4100,vic401kContrib:5029,chaseRothContrib:7000,vicRothContrib:2400};
 
@@ -2253,18 +2254,20 @@ const AI_TIMEOUT_MS = 30000;
 async function callClaude({system, user, maxTokens=2048, retries=2}){
   const key = STATE.settings.apiKey;
   if(!key) throw new Error('No API key set');
+  const proxyUrl = (STATE.settings.proxyUrl||'').trim();
+  const endpoint = proxyUrl || 'https://api.anthropic.com/v1/messages';
   let lastErr;
   for(let attempt=0; attempt<=retries; attempt++){
     const ctrl = new AbortController();
     const to = setTimeout(()=>ctrl.abort(), AI_TIMEOUT_MS);
     try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch(endpoint, {
         method:'POST',
         headers:{
           'Content-Type':'application/json',
           'x-api-key': key,
           'anthropic-version':'2023-06-01',
-          // CORRECT header for browser-direct calls (was wrong before → silent CORS fail)
+          // Required for direct browser calls (proxy can ignore it)
           'anthropic-dangerous-direct-browser-access':'true'
         },
         signal: ctrl.signal,
@@ -2754,13 +2757,16 @@ function updateDashboard(){
   const emergFund=g('emergFund'),emergTarget=fixedExp*(g('emergMonths')||6),emergMonths=fixedExp>0?emergFund/fixedExp:0;
   const debtRates=[{b:g('aidvantage'),r:g('aidvantageRate')},{b:g('edfinancial'),r:g('edfinancialRate')},{b:g('ecsi'),r:g('ecsiRate')},{b:g('ufcom'),r:g('ufcomRate')}];
   const wRate=studentDebt>0?debtRates.reduce((s,d)=>s+(d.b/studentDebt*d.r),0):0;
+  // Helper to safely set textContent or innerHTML on possibly-missing elements
+  const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  const setHTML=(id,v)=>{const el=document.getElementById(id);if(el)el.innerHTML=v;};
   setEl('d-netWorth',(netWorth<0?'−':'')+fmt(netWorth),netWorth>=0?'positive':'negative');
-  document.getElementById('d-netWorthSub').textContent=`Assets: ${fmt(totalAssets)} · Liabilities: ${fmt(totalNonMortgage+mortgage)}`;
+  setText('d-netWorthSub',`Assets: ${fmt(totalAssets)} · Liabilities: ${fmt(totalNonMortgage+mortgage)}`);
   setEl('d-savingsRate',savingsRate.toFixed(1)+'%',savingsRate>=20?'positive':savingsRate>=10?'neutral':'negative');
   setEl('d-cashFlow',(cashFlow<0?'−':'')+fmt(cashFlow),cashFlow>0?'positive':'negative');
   setEl('d-emergency',emergMonths.toFixed(1)+' mo',emergMonths>=6?'positive':emergMonths>=3?'neutral':'negative');
   setEl('d-studentDebt','−'+fmt(studentDebt),'negative');
-  document.getElementById('d-studentDebtSub').textContent=`Weighted rate: ${wRate.toFixed(1)}%`;
+  setText('d-studentDebtSub',`Weighted rate: ${wRate.toFixed(1)}%`);
   // Non-mortgage debt = student loans + auto + furniture (CC balances tracked separately)
   setEl('d-totalDebt','−'+fmt(totalNonMortgage),'negative');
   const debtSubEl=document.getElementById('d-totalDebtSub');
@@ -2772,9 +2778,9 @@ function updateDashboard(){
   const emergM2=document.getElementById('d-emergMonths2');if(emergM2)emergM2.textContent=emergMonths.toFixed(1)+' of '+(g('emergMonths')||6)+' months covered';
   const emergTgtEl=document.getElementById('d-emergTarget');if(emergTgtEl)emergTgtEl.textContent='Target: '+fmt(emergTarget);
   const debtItems=[{label:'Aidvantage',key:'aidvantage',rate:g('aidvantageRate'),orig:Math.max(g('aidvantage')+2000,69000),color:'var(--danger)'},{label:'Edfinancial',key:'edfinancial',rate:g('edfinancialRate'),orig:Math.max(g('edfinancial'),136388),color:'var(--danger)'},{label:'ECSI (Deferred)',key:'ecsi',rate:g('ecsiRate'),orig:g('ecsi'),color:'var(--warn)'},{label:'UFCOM Selby',key:'ufcom',rate:g('ufcomRate'),orig:g('ufcom'),color:'var(--warn)'},{label:'Auto (Corolla)',key:'auto',rate:g('autoRate'),orig:15000,color:'var(--info)'},{label:'Furniture',key:'furniture',rate:0,orig:3000,color:'var(--purple)'}].filter(d=>g(d.key)>0);
-  document.getElementById('d-debtBars').innerHTML=debtItems.map(d=>{const bal=g(d.key),pct=d.orig>0?Math.min((1-bal/d.orig)*100,100):0;return`<div class="progress-row"><div class="progress-meta"><span>${d.label}${d.rate?' '+d.rate+'%':''}</span><span>${fmt(bal)}</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct.toFixed(1)}%;background:${d.color}"></div></div></div>`;}).join('')||'<div style="color:var(--muted);font-size:11px;padding:4px 0">No debt balances entered</div>';
+  setHTML('d-debtBars',debtItems.map(d=>{const bal=g(d.key),pct=d.orig>0?Math.min((1-bal/d.orig)*100,100):0;return`<div class="progress-row"><div class="progress-meta"><span>${d.label}${d.rate?' '+d.rate+'%':''}</span><span>${fmt(bal)}</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct.toFixed(1)}%;background:${d.color}"></div></div></div>`;}).join('')||'<div style="color:var(--muted);font-size:11px;padding:4px 0">No debt balances entered</div>');
   const total403b=g('chase403bContrib')+g('vic401kContrib'),totalRoth=g('chaseRothContrib')+g('vicRothContrib');
-  document.getElementById('d-retirementBars').innerHTML=`<div class="progress-row"><div class="progress-meta"><span>403b/401k — ${fmt(total403b)} contributed</span><span>$47,000 max</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(total403b/47000*100,100).toFixed(1)}%"></div></div></div><div class="progress-row"><div class="progress-meta"><span>Roth IRA — ${fmt(totalRoth)} contributed</span><span>$14,000 max</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(totalRoth/14000*100,100).toFixed(1)}%"></div></div></div><div class="progress-row"><div class="progress-meta"><span>Emergency Fund — ${emergMonths.toFixed(1)} / ${g('emergMonths')||6} months</span><span>${fmt(emergFund)}</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(emergMonths/(g('emergMonths')||6)*100,100).toFixed(1)}%;background:var(--warn)"></div></div></div>`;
+  setHTML('d-retirementBars',`<div class="progress-row"><div class="progress-meta"><span>403b/401k — ${fmt(total403b)} contributed</span><span>$47,000 max</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(total403b/47000*100,100).toFixed(1)}%"></div></div></div><div class="progress-row"><div class="progress-meta"><span>Roth IRA — ${fmt(totalRoth)} contributed</span><span>$14,000 max</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(totalRoth/14000*100,100).toFixed(1)}%"></div></div></div><div class="progress-row"><div class="progress-meta"><span>Emergency Fund — ${emergMonths.toFixed(1)} / ${g('emergMonths')||6} months</span><span>${fmt(emergFund)}</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(emergMonths/(g('emergMonths')||6)*100,100).toFixed(1)}%;background:var(--warn)"></div></div></div>`);
   const strats=[];
   if(emergMonths<3)strats.push({i:'🛡️',t:`Emergency fund critical — ${emergMonths.toFixed(1)} months covered, target 6 months`,c:'negative'});
   if(g('furniture')>0)strats.push({i:'🚨',t:`Eliminate Synchrony furniture debt (${fmt(g('furniture'))}) — 0% promo may expire`,c:'negative'});
@@ -2782,10 +2788,10 @@ function updateDashboard(){
   if(cashFlow>2000)strats.push({i:'💰',t:`$${fmt(cashFlow,'')} monthly cash flow — allocate before lifestyle inflation`,c:'positive'});
   strats.push({i:'🎯',t:'August 2026: Victoria attending → immediately maximize all retirement accounts',c:'neutral'});
   strats.push({i:'📋',t:'Backdoor Roth: Switch method once MAGI exceeds $236K MFJ threshold',c:'neutral'});
-  document.getElementById('d-strategies').innerHTML=strats.map(s=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)"><span>${s.i}</span><span style="font-size:11px;color:${s.c==='negative'?'var(--danger)':s.c==='positive'?'var(--accent)':'var(--muted)'};line-height:1.5">${s.t}</span></div>`).join('');
+  setHTML('d-strategies',strats.map(s=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)"><span>${s.i}</span><span style="font-size:11px;color:${s.c==='negative'?'var(--danger)':s.c==='positive'?'var(--accent)':'var(--muted)'};line-height:1.5">${s.t}</span></div>`).join(''));
   const sortedMonths=Object.keys(STATE.spending||{}).sort().reverse();
-  if(sortedMonths.length){const lastKey=sortedMonths[0],[ly,lm]=lastKey.split('-').map(Number);const catTotals={};let spendTotal=0;const NON_SPEND=new Set(['Debt Payments','Income','Transfer','CC Payment']);for(const cats of Object.values(STATE.spending[lastKey]||{})){for(const[cat,amt]of Object.entries(cats)){if(cat==='_txns')continue;catTotals[cat]=(catTotals[cat]||0)+amt;if(!NON_SPEND.has(cat)&&amt>0)spendTotal+=amt;}}const topCats=Object.entries(catTotals).filter(([cat,v])=>v>0&&!NON_SPEND.has(cat)).sort((a,b)=>b[1]-a[1]).slice(0,5);document.getElementById('d-lastSpending').innerHTML=`<div class="card-title">${MONTHS_FULL[lm-1]} ${ly}<span style="font-size:10px;color:var(--muted)">${fmt(spendTotal)} spending</span></div>${topCats.map(([cat,amt])=>`<div class="cat-row"><div class="cat-dot" style="background:${CAT_COLORS[cat]||'#475569'}"></div><div class="cat-name">${cat}</div><div class="cat-val">${fmt(amt)}</div></div>`).join('')}${!topCats.length?'<div style="color:var(--muted);font-size:11px">No consumer spending data</div>':''}`;
-  }else{document.getElementById('d-lastSpending').innerHTML='<div class="empty-state" style="padding:16px"><div class="empty-icon">📤</div><div class="empty-title">No spending data yet</div><div class="empty-sub">Import CSV/PDF statements</div></div>';}
+  if(sortedMonths.length){const lastKey=sortedMonths[0],[ly,lm]=lastKey.split('-').map(Number);const catTotals={};let spendTotal=0;const NON_SPEND=new Set(['Debt Payments','Income','Transfer','CC Payment']);for(const cats of Object.values(STATE.spending[lastKey]||{})){for(const[cat,amt]of Object.entries(cats)){if(cat==='_txns')continue;catTotals[cat]=(catTotals[cat]||0)+amt;if(!NON_SPEND.has(cat)&&amt>0)spendTotal+=amt;}}const topCats=Object.entries(catTotals).filter(([cat,v])=>v>0&&!NON_SPEND.has(cat)).sort((a,b)=>b[1]-a[1]).slice(0,5);setHTML('d-lastSpending',`<div class="card-title">${MONTHS_FULL[lm-1]} ${ly}<span style="font-size:10px;color:var(--muted)">${fmt(spendTotal)} spending</span></div>${topCats.map(([cat,amt])=>`<div class="cat-row"><div class="cat-dot" style="background:${CAT_COLORS[cat]||'#475569'}"></div><div class="cat-name">${cat}</div><div class="cat-val">${fmt(amt)}</div></div>`).join('')}${!topCats.length?'<div style="color:var(--muted);font-size:11px">No consumer spending data</div>':''}`);
+  }else{setHTML('d-lastSpending','<div class="empty-state" style="padding:16px"><div class="empty-icon">📤</div><div class="empty-title">No spending data yet</div><div class="empty-sub">Import CSV/PDF statements</div></div>');}
   updateSectionTotals();
 }
 
@@ -2798,9 +2804,27 @@ function addLast4(){const last4=document.getElementById('new-last4').value.trim(
 function populateLast4CardSelect(){const sel=document.getElementById('new-last4-card');Object.entries(CARD_PROFILES).forEach(([k,p])=>{const o=document.createElement('option');o.value=k;o.textContent=`${p.label} (${p.owner})`;sel.add(o);});}
 function renderCustomRules(){document.getElementById('custom-rules-list').innerHTML=STATE.customRules.length?STATE.customRules.map((r,i)=>`<div class="rule-row"><span class="rule-pattern">${r.pattern}</span><span class="rule-arrow">→</span><span class="rule-cat">${r.category}</span><button class="rule-delete" onclick="STATE.customRules.splice(${i},1);saveState();renderCustomRules()">×</button></div>`).join(''):'<div style="font-size:11px;color:var(--dim);padding:4px 0">No custom rules</div>';const sel=document.getElementById('new-rule-cat');if(sel&&sel.options.length<=1)CATEGORIES.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.add(o);});}
 function addCustomRule(){const p=document.getElementById('new-rule-pattern').value.trim(),c=document.getElementById('new-rule-cat').value;if(!p||!c){showToast('Enter pattern and category','error');return;}STATE.customRules.unshift({pattern:p,category:c});document.getElementById('new-rule-pattern').value='';document.getElementById('new-rule-cat').value='';saveState();renderCustomRules();showToast('Rule added','success');}
-function openApiKeyModal(){document.getElementById('apiKeyModal').classList.add('open');}
+function openApiKeyModal(){
+  // Pre-fill existing values so user can edit instead of retyping
+  const ai=document.getElementById('apikey-input');
+  const pi=document.getElementById('proxy-input');
+  if(ai)ai.value=STATE.settings.apiKey||'';
+  if(pi)pi.value=STATE.settings.proxyUrl||'';
+  document.getElementById('apiKeyModal').classList.add('open');
+}
 function closeApiKeyModal(){document.getElementById('apiKeyModal').classList.remove('open');}
-function saveApiKey(){const k=document.getElementById('apikey-input').value.trim();if(!k.startsWith('sk-ant-')){showToast('Must start with sk-ant-','error');return;}STATE.settings.apiKey=k;saveState();document.getElementById('apikey-display').textContent=k.slice(0,12)+'...';closeApiKeyModal();showToast('API key saved','success');}
+function saveApiKey(){
+  const k=document.getElementById('apikey-input').value.trim();
+  const proxy=document.getElementById('proxy-input').value.trim();
+  if(!k.startsWith('sk-ant-')){showToast('API key must start with sk-ant-','error');return;}
+  if(proxy && !/^https?:\/\//i.test(proxy)){showToast('Proxy URL must start with https://','error');return;}
+  STATE.settings.apiKey=k;
+  STATE.settings.proxyUrl=proxy;
+  saveState();
+  document.getElementById('apikey-display').textContent=k.slice(0,12)+'...'+(proxy?' · proxied':'');
+  closeApiKeyModal();
+  showToast('Saved'+(proxy?' (using proxy)':' — but CORS will block on hosted sites!'),'success');
+}
 
 // Data management
 function saveBackup(){const blob=new Blob([JSON.stringify({...STATE,_version:4,_exported:new Date().toISOString()},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`wci-backup-${new Date().toISOString().split('T')[0]}.json`;a.click();showToast('Backup downloaded','success');}
@@ -3411,7 +3435,7 @@ renderLogPills();
 updateDashboard();
 updateReviewBadge();
 populateLast4CardSelect();
-if(STATE.settings.apiKey)document.getElementById('apikey-display').textContent=STATE.settings.apiKey.slice(0,12)+'...';
+if(STATE.settings.apiKey)document.getElementById('apikey-display').textContent=STATE.settings.apiKey.slice(0,12)+'...'+(STATE.settings.proxyUrl?' · proxied':' · NO PROXY');
 if(STATE.settings.confidenceThreshold)document.getElementById('conf-threshold').value=STATE.settings.confidenceThreshold;
 document.getElementById('header-sub').textContent=new Date().toLocaleDateString('en-US',{month:'long',year:'numeric'})+' · Live Like a Resident';
 setTimeout(()=>{
