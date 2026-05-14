@@ -2247,7 +2247,7 @@ function updateReviewBadge(){const n=STATE.reviewQueue.filter(t=>!t.reviewed).le
 // Centralized Claude API caller. Uses the correct browser-access header
 // (the old "anthropic-dangerous-allow-any-cors-origin" was wrong → CORS blocked).
 // Has timeouts, retries on 429/5xx, structured error logging.
-const AI_MODEL = 'claude-sonnet-4-20250514';
+const AI_MODEL = 'claude-haiku-4-5';
 const AI_BATCH_SIZE = 40; // tokens cap: keep batches small to avoid truncation
 const AI_TIMEOUT_MS = 30000;
 
