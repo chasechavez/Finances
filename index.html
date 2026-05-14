@@ -337,7 +337,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div id="reviewQueue"></div>
       <div id="review-empty" class="card"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Nothing to review</div><div class="empty-sub">Import CSV files to start</div></div></div>
       <div id="commit-wrap" style="display:none;gap:8px;flex-direction:column">
-        <button class="btn btn-primary btn-full" onclick="commitAll()">💾 Commit All Reviewed →</button>
+        <button class="btn btn-primary btn-full" onclick="acceptAllAndCommit()">✓ Accept All & Commit →</button>
+        <button class="btn btn-ghost btn-full" onclick="commitAll()">💾 Commit Only Reviewed</button>
         <button class="btn btn-ghost btn-full" onclick="clearReview()">Clear Queue</button>
       </div>
     </div>
@@ -2241,13 +2242,20 @@ function commitAll(){
   showToast(`Committed ${toCommit.length} transactions`,'success');
 }
 function clearReview(){if(!confirm('Clear review queue?'))return;STATE.reviewQueue=[];saveState();updateReviewBadge();renderReviewQueue();}
+function acceptAllAndCommit(){
+  const pending=STATE.reviewQueue.filter(t=>!t.reviewed);
+  if(!pending.length){showToast('Nothing to accept','error');return;}
+  if(!confirm(`Accept all ${pending.length} transactions with their current categories and commit?`))return;
+  pending.forEach(t=>t.reviewed=true);
+  commitAll();
+}
 function updateReviewBadge(){const n=STATE.reviewQueue.filter(t=>!t.reviewed).length;const b=document.getElementById('review-badge');b.textContent=n;b.style.display=n>0?'inline':'none';}
 
 // ── AI Categorization ─────────────────────────────────────────────────────────
 // Centralized Claude API caller. Uses the correct browser-access header
 // (the old "anthropic-dangerous-allow-any-cors-origin" was wrong → CORS blocked).
 // Has timeouts, retries on 429/5xx, structured error logging.
-const AI_MODEL = 'claude-haiku-4-5';
+const AI_MODEL = 'claude-sonnet-4-20250514';
 const AI_BATCH_SIZE = 40; // tokens cap: keep batches small to avoid truncation
 const AI_TIMEOUT_MS = 30000;
 
