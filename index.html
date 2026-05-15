@@ -721,9 +721,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           <div class="metric-tile-sub">Fidelity + Robinhood</div>
         </div>
         <div class="metric-tile">
-          <div class="metric-tile-label">Annual Contributions</div>
+          <div class="metric-tile-label">YTD Contributions</div>
           <div class="metric-tile-value num" id="inv-ann-contrib">—</div>
-          <div class="metric-tile-sub">All accounts</div>
+          <div class="metric-tile-sub">All tax-advantaged</div>
         </div>
         <div class="metric-tile">
           <div class="metric-tile-label">HSA Balance</div>
@@ -735,20 +735,47 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <!-- Contribution Progress -->
       <div class="section-label">2026 Contribution Progress</div>
       <div class="card" id="inv-contrib-progress">
+        <!-- Person toggle -->
+        <div class="contrib-toggle" style="display:flex;gap:6px;margin-bottom:14px;background:var(--bg-secondary);padding:4px;border-radius:8px">
+          <button class="contrib-tab" data-person="chase" onclick="setContribView('chase')" style="flex:1;padding:6px 10px;background:transparent;border:none;border-radius:6px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer">Chase</button>
+          <button class="contrib-tab" data-person="victoria" onclick="setContribView('victoria')" style="flex:1;padding:6px 10px;background:transparent;border:none;border-radius:6px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer">Victoria</button>
+          <button class="contrib-tab active" data-person="combined" onclick="setContribView('combined')" style="flex:1;padding:6px 10px;background:var(--accent);border:none;border-radius:6px;color:#fff;font-size:11px;font-weight:600;cursor:pointer">Combined</button>
+        </div>
+
+        <!-- Mini stat strip -->
+        <div id="inv-contrib-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px"></div>
+
+        <!-- Stacked bars per account type -->
         <div class="progress-row">
-          <div class="progress-meta"><span>403b/401k (Both)</span><span id="inv-403b-text">$0 / $47,000</span></div>
-          <div class="progress-track"><div class="progress-fill" id="inv-403b-bar" style="background:var(--accent)"></div></div>
+          <div class="progress-meta"><span id="inv-403b-label">401k / 403b</span><span id="inv-403b-text">$0 / $0</span></div>
+          <div class="progress-track" style="display:flex;overflow:hidden">
+            <div id="inv-403b-bar-emp"   style="background:var(--accent);height:100%;width:0%"></div>
+            <div id="inv-403b-bar-er"    style="background:var(--info);height:100%;width:0%"></div>
+          </div>
         </div>
         <div class="progress-row">
-          <div class="progress-meta"><span>Roth IRA (Both)</span><span id="inv-roth-text">$0 / $14,000</span></div>
-          <div class="progress-track"><div class="progress-fill" id="inv-roth-bar" style="background:var(--info)"></div></div>
+          <div class="progress-meta"><span id="inv-roth-label">Roth IRA</span><span id="inv-roth-text">$0 / $0</span></div>
+          <div class="progress-track" style="display:flex;overflow:hidden">
+            <div id="inv-roth-bar-emp"   style="background:var(--purple);height:100%;width:0%"></div>
+          </div>
         </div>
         <div class="progress-row">
-          <div class="progress-meta"><span>HSA</span><span id="inv-hsa-text">$0 / $4,150</span></div>
-          <div class="progress-track"><div class="progress-fill" id="inv-hsa-bar" style="background:var(--purple)"></div></div>
+          <div class="progress-meta"><span id="inv-hsa-label">HSA</span><span id="inv-hsa-text">$0 / $0</span></div>
+          <div class="progress-track" style="display:flex;overflow:hidden">
+            <div id="inv-hsa-bar-emp"   style="background:#f59e0b;height:100%;width:0%"></div>
+            <div id="inv-hsa-bar-er"    style="background:#fbbf24;height:100%;width:0%"></div>
+          </div>
         </div>
+
+        <!-- Legend -->
+        <div style="display:flex;gap:14px;margin-top:10px;font-size:9px;color:var(--dim);justify-content:center;flex-wrap:wrap">
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent)"></span>Employee</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--info)"></span>Employer match</span>
+          <span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:2px;background:var(--border)"></span>Room to max</span>
+        </div>
+
         <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
-          <div class="progress-meta"><span style="font-weight:600">Total Retirement (All Accounts)</span><span id="inv-total-text">$0 / $0</span></div>
+          <div class="progress-meta"><span style="font-weight:600">Total Tax-Advantaged</span><span id="inv-total-text">$0 / $0</span></div>
           <div class="progress-track" style="height:8px;border-radius:4px"><div class="progress-fill" id="inv-total-bar" style="height:8px;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--purple))"></div></div>
         </div>
       </div>
@@ -3391,7 +3418,7 @@ function renderTxnList(txns){const el=document.getElementById('sp-txns-list');if
 function filterTxns(q){if(!STATE._allTxns)return;renderTxnList(q?STATE._allTxns.filter(t=>t.desc.toLowerCase().includes(q.toLowerCase())||(t.category||'').toLowerCase().includes(q.toLowerCase())):STATE._allTxns);}
 
 // Snapshot
-function computeSnapshotFromAccounts(){const a=STATE.accounts,g=v=>a[v]||0;const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360');const retAssets=g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');const totalAssets=cashAssets+retAssets,totalDebts=studentDebt+otherDebt+mortgage,netWorth=totalAssets-totalDebts;const monthlyGross=(g('chaseGross')+g('vicGross'));const annualGross=monthlyGross*12;const retContribs=g('chase403bContrib')+g('vic401kContrib')+g('chaseRothContrib')+g('vicRothContrib')+(g('hsaContrib')*12);return{totalAssets,totalDebts,netWorth,aidvantage:g('aidvantage'),edfinancial:g('edfinancial'),ecsi:g('ecsi'),ufcom:g('ufcom'),auto:g('auto'),furniture:g('furniture'),mortgage,emergencyFund:g('emergFund'),monthlyGross,fixedExpenses:g('fixedExp'),savingsRate:annualGross>0?(retContribs/annualGross*100):0,rentalIncome:g('rentalIncome'),rentalExpenses:g('rentalExpenses'),chase403b:g('chase403b'),vic401k:g('vic401k'),chaseRoth:g('chaseRoth'),vicRoth:g('vicRoth')};}
+function computeSnapshotFromAccounts(){const a=STATE.accounts,g=v=>a[v]||0;const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360');const retAssets=g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');const totalAssets=cashAssets+retAssets,totalDebts=studentDebt+otherDebt+mortgage,netWorth=totalAssets-totalDebts;const monthlyGross=(g('chaseGross')+g('vicGross'));const annualGross=monthlyGross*12;const _ys=getYtdContributions();const retContribs=_ys.chase.retirement+_ys.victoria.retirement+_ys.chase.roth+_ys.victoria.roth+_ys.chase.hsa;return{totalAssets,totalDebts,netWorth,aidvantage:g('aidvantage'),edfinancial:g('edfinancial'),ecsi:g('ecsi'),ufcom:g('ufcom'),auto:g('auto'),furniture:g('furniture'),mortgage,emergencyFund:g('emergFund'),monthlyGross,fixedExpenses:g('fixedExp'),savingsRate:annualGross>0?(retContribs/annualGross*100):0,rentalIncome:g('rentalIncome'),rentalExpenses:g('rentalExpenses'),chase403b:g('chase403b'),vic401k:g('vic401k'),chaseRoth:g('chaseRoth'),vicRoth:g('vicRoth')};}
 function logSnapshot(){const now=new Date();const key=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;STATE.monthlyLog[key]=computeSnapshotFromAccounts();saveState();renderLogPills();renderAllCharts();showToast(`Snapshot logged for ${MONTHS[now.getMonth()]} ${now.getFullYear()}`,'success');}
 function deleteSnapshot(key){delete STATE.monthlyLog[key];saveState();renderLogPills();renderAllCharts();}
 function renderLogPills(){const container=document.getElementById('log-history-pills');const months=Object.keys(STATE.monthlyLog).sort();container.innerHTML=months.map(m=>{const[y,mo]=m.split('-').map(Number);return`<span class="log-pill" title="Click to delete" onclick="if(confirm('Delete?'))deleteSnapshot('${m}')">${MONTHS[mo-1]} ${y} ×</span>`;}).join('');}
@@ -3508,7 +3535,11 @@ function updateDashboard(){
   const monthlyGross=trackedIncome>0?trackedIncome:(chaseGross+vicGross);
   const takeHome=chaseTH+vicTH;
   const fixedExp=g('fixedExp')||3500,cashFlow=takeHome-fixedExp,annualGross=monthlyGross*12;
-  const retContribs=g('chase403bContrib')+g('vic401kContrib')+g('chaseRothContrib')+g('vicRothContrib')+(g('hsaContrib')*12);
+  // Savings rate uses helper to avoid HSA double-count and to use parsed YTD when available.
+  // Note: this is a YTD-based rate when HSA is parsed (mixing annualized 401k field with
+  // YTD HSA). The 401k/Roth fields are already annualized expectations from parsers/manual entry.
+  const _yc=getYtdContributions();
+  const retContribs=_yc.chase.retirement+_yc.victoria.retirement+_yc.chase.roth+_yc.victoria.roth+_yc.chase.hsa;
   const savingsRate=annualGross>0?(retContribs/annualGross*100):0;
   const emergFund=g('emergFund'),emergTarget=fixedExp*(g('emergMonths')||6),emergMonths=fixedExp>0?emergFund/fixedExp:0;
   const debtRates=[{b:g('aidvantage'),r:g('aidvantageRate')},{b:g('edfinancial'),r:g('edfinancialRate')},{b:g('ecsi'),r:g('ecsiRate')},{b:g('ufcom'),r:g('ufcomRate')}];
@@ -3618,6 +3649,47 @@ function switchTab(name){
   if(name==='dashboard')requestAnimationFrame(()=>setTimeout(()=>{renderAllCharts();if(Object.keys(STATE.investments||{}).length)renderInvestmentCharts();},80));
 }
 
+// ── YTD CONTRIBUTIONS — single source of truth ───────────────────────────────
+// Returns YTD contribution snapshot split by person + combined view.
+// Account-level fields (chase403bContrib, etc.) already store emp+er totals
+// from parsers (NetBenefits writes totalContrib=employee+employer). So we
+// never sum the parsed emp/er pair AND the field — that would double-count.
+// HSA is special: the manual `hsaContrib` field is monthly. If the HealthEquity
+// parser has imported statements, we use STATE.balanceLog.hsa.ytdEmployee/Employer
+// (actual YTD, no projection). Otherwise fall back to hsaContrib*monthsElapsed.
+// Limits per IRS 2026: 401k/403b $23,500 · Roth IRA $7,000 · HSA family $8,550.
+function getYtdContributions(){
+  const a=STATE.accounts||{}, g=v=>(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
+  const hsaLog=STATE.balanceLog&&STATE.balanceLog.hsa;
+  const hsaFromStmts=hsaLog&&(hsaLog.ytdEmployeeContrib!=null||hsaLog.ytdEmployerContrib!=null);
+  // HSA YTD: prefer parsed statements (most accurate). Fallback: monthly×months elapsed.
+  let hsaEmp=0, hsaEr=0;
+  if(hsaFromStmts){
+    hsaEmp=hsaLog.ytdEmployeeContrib||0;
+    hsaEr =hsaLog.ytdEmployerContrib||0;
+  } else {
+    const monthsElapsed=new Date().getMonth()+1;
+    hsaEmp=g('hsaContrib')*monthsElapsed; // legacy field is employee-only monthly
+    hsaEr =0;
+  }
+  return {
+    chase: {
+      retirement: g('chase403bContrib'),      // already emp+er from parser
+      roth:       g('chaseRothContrib'),
+      hsa:        hsaEmp + hsaEr,             // Chase is the HSA holder
+      hsaEmp, hsaEr
+    },
+    victoria: {
+      retirement: g('vic401kContrib'),        // emp+er when parsed
+      roth:       g('vicRothContrib'),
+      hsa:        0,
+      hsaEmp:0, hsaEr:0
+    },
+    limits: { retirement: 23500, roth: 7000, hsa: 8550 },
+    hsaFromStmts
+  };
+}
+
 // ── INVESTMENTS TAB ─────────────────────────────────────────────────────────
 function renderInvestmentsTab(){
   const a=STATE.accounts,g=v=>(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
@@ -3634,27 +3706,119 @@ function renderInvestmentsTab(){
   setT('inv-brokerage',fmt(brok));
   setT('inv-hsa',fmt(hsa));
 
-  const c403bC=g('chase403bContrib'),v401kC=g('vic401kContrib'),cRothC=g('chaseRothContrib'),vRothC=g('vicRothContrib'),hsaC=g('hsaContrib')*12;
-  const totalContrib=c403bC+v401kC+cRothC+vRothC+hsaC;
-  setT('inv-ann-contrib',fmt(totalContrib)+'/yr');
+  // Annual contribution metric tile — sum YTD totals from helper
+  // (avoids double-counting and uses parsed HSA YTD when available).
+  const _y=getYtdContributions();
+  const totalContrib=_y.chase.retirement+_y.victoria.retirement+_y.chase.roth+_y.victoria.roth+_y.chase.hsa;
+  setT('inv-ann-contrib',fmt(totalContrib)+' YTD');
 
-  // Progress bars
-  const e403b=c403bC+v401kC,eRoth=cRothC+vRothC,eHSA=hsaC;
-  const setBar=(id,pct)=>{const el=document.getElementById(id);if(el)el.style.width=Math.min(pct,100).toFixed(1)+'%';};
-  setBar('inv-403b-bar',e403b/47000*100);
-  setBar('inv-roth-bar',eRoth/14000*100);
-  setBar('inv-hsa-bar',eHSA/4150*100);
-  setBar('inv-total-bar',(e403b+eRoth+eHSA)/(47000+14000+4150)*100);
-  setT('inv-403b-text',fmt(e403b)+' / $47,000');
-  setT('inv-roth-text',fmt(eRoth)+' / $14,000');
-  setT('inv-hsa-text',fmt(eHSA)+' / $4,150');
-  setT('inv-total-text',fmt(e403b+eRoth+eHSA)+' / '+'$65,150');
+  // ── 2026 Contribution Progress (Chase / Victoria / Combined toggle) ──
+  // Uses getYtdContributions() as single source of truth → no double-counting.
+  // Default view is whatever STATE.ui.contribView is set to (init: 'combined').
+  if(!STATE.ui)STATE.ui={};
+  if(!STATE.ui.contribView)STATE.ui.contribView='combined';
+  renderContribProgress();
 
   // Account details
   setT('inv-det-403b',fmt(c403b));setT('inv-det-401k',fmt(v401k));
   setT('inv-det-croth',fmt(cRoth));setT('inv-det-vroth',fmt(vRoth));
   setT('inv-det-fibrok',fmt(fibrok));setT('inv-det-rh',fmt(rh));
   setT('inv-det-hsa',fmt(hsa));
+}
+
+// Toggle handler — called from the Chase / Victoria / Combined buttons.
+function setContribView(person){
+  if(!STATE.ui)STATE.ui={};
+  STATE.ui.contribView=person;
+  saveState();
+  // Visual toggle state
+  document.querySelectorAll('.contrib-tab').forEach(b=>{
+    const isActive=b.dataset.person===person;
+    b.classList.toggle('active',isActive);
+    b.style.background=isActive?'var(--accent)':'transparent';
+    b.style.color=isActive?'#fff':'var(--muted)';
+  });
+  renderContribProgress();
+}
+
+// Pure-render function. Reads STATE.ui.contribView, draws stacked bars per
+// account type, stat strip, and total. Each bar has Employee segment +
+// Employer segment + empty room. Combined view doubles the per-person limit
+// (Roth: $7K → $14K, 401k/403b: $23.5K → $47K). HSA stays at $8,550 family
+// since Chase is the sole HSA holder (Victoria isn't on the HDHP).
+function renderContribProgress(){
+  const y=getYtdContributions();
+  const view=(STATE.ui&&STATE.ui.contribView)||'combined';
+  const fmt=n=>'$'+Math.round(n).toLocaleString('en-US');
+
+  // Sync toggle visual state (covers reload-with-saved-view case).
+  document.querySelectorAll('.contrib-tab').forEach(b=>{
+    const isActive=b.dataset.person===view;
+    b.classList.toggle('active',isActive);
+    b.style.background=isActive?'var(--accent)':'transparent';
+    b.style.color=isActive?'#fff':'var(--muted)';
+  });
+
+  // Aggregate by view. For combined: HSA limit stays $8,550 (one holder).
+  let p, limits;
+  if(view==='chase'){
+    p={ret:y.chase.retirement, retEmp:y.chase.retirement, retEr:0, roth:y.chase.roth, hsa:y.chase.hsa, hsaEmp:y.chase.hsaEmp, hsaEr:y.chase.hsaEr};
+    limits={ret:y.limits.retirement, roth:y.limits.roth, hsa:y.limits.hsa};
+  } else if(view==='victoria'){
+    p={ret:y.victoria.retirement, retEmp:y.victoria.retirement, retEr:0, roth:y.victoria.roth, hsa:y.victoria.hsa, hsaEmp:0, hsaEr:0};
+    limits={ret:y.limits.retirement, roth:y.limits.roth, hsa:y.limits.hsa};
+  } else {
+    p={
+      ret: y.chase.retirement+y.victoria.retirement,
+      retEmp: y.chase.retirement+y.victoria.retirement, retEr: 0,
+      roth: y.chase.roth+y.victoria.roth,
+      hsa: y.chase.hsa,
+      hsaEmp: y.chase.hsaEmp, hsaEr: y.chase.hsaEr
+    };
+    limits={ret:y.limits.retirement*2, roth:y.limits.roth*2, hsa:y.limits.hsa};
+  }
+
+  // Stat strip: three mini-cards above the bars.
+  const setText=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  const setHTML=(id,v)=>{const el=document.getElementById(id);if(el)el.innerHTML=v;};
+  const pctOf=(v,m)=>m>0?Math.min(v/m*100,100):0;
+  const statCard=(label,val,lim)=>{
+    const pct=pctOf(val,lim).toFixed(0);
+    return `<div style="background:var(--bg-secondary);border-radius:6px;padding:8px 10px">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">${label}</div>
+      <div style="font-size:14px;font-weight:600;font-family:'DM Mono',monospace">${fmt(val)}</div>
+      <div style="font-size:9px;color:var(--muted)">${pct}% of ${fmt(lim)}</div>
+    </div>`;
+  };
+  setHTML('inv-contrib-stats',
+    statCard('401k/403b',p.ret,limits.ret)+
+    statCard('Roth IRA',p.roth,limits.roth)+
+    statCard('HSA',p.hsa,limits.hsa)
+  );
+
+  // Stacked bar widths.
+  const setW=(id,pct)=>{const el=document.getElementById(id);if(el)el.style.width=pct.toFixed(1)+'%';};
+  setW('inv-403b-bar-emp', pctOf(p.retEmp,limits.ret));
+  setW('inv-403b-bar-er',  pctOf(p.retEr ,limits.ret));
+  setW('inv-roth-bar-emp', pctOf(p.roth,  limits.roth));
+  setW('inv-hsa-bar-emp',  pctOf(p.hsaEmp,limits.hsa));
+  setW('inv-hsa-bar-er',   pctOf(p.hsaEr, limits.hsa));
+
+  // Text labels.
+  const personLabel=view==='combined'?'Combined':(view==='chase'?'Chase':'Victoria');
+  setText('inv-403b-label', view==='combined'?'401k / 403b (Both)':`401k / 403b — ${personLabel}`);
+  setText('inv-roth-label', view==='combined'?'Roth IRA (Both)'   :`Roth IRA — ${personLabel}`);
+  setText('inv-hsa-label',  view==='combined'?'HSA (Chase)'       :(view==='chase'?'HSA':'HSA (none)'));
+  setText('inv-403b-text', fmt(p.ret )+' / '+fmt(limits.ret));
+  setText('inv-roth-text', fmt(p.roth)+' / '+fmt(limits.roth));
+  setText('inv-hsa-text',  fmt(p.hsa )+' / '+fmt(limits.hsa));
+
+  // Total bar.
+  const totalContrib=p.ret+p.roth+p.hsa;
+  const totalLimit=limits.ret+limits.roth+limits.hsa;
+  setText('inv-total-text', fmt(totalContrib)+' / '+fmt(totalLimit));
+  const tb=document.getElementById('inv-total-bar');
+  if(tb)tb.style.width=pctOf(totalContrib,totalLimit).toFixed(1)+'%';
 }
 
 // ── DEBTS TAB ────────────────────────────────────────────────────────────────
@@ -3820,7 +3984,8 @@ function renderIncomeTab(){
   // Savings rate bar
   const a=STATE.accounts,g=v=>(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
   const annualGross=(g('chaseGross')||8207+(g('vicGross')||3864.50))*12;
-  const retContribs=g('chase403bContrib')+g('vic401kContrib')+g('chaseRothContrib')+g('vicRothContrib')+(g('hsaContrib')*12);
+  const _yi=getYtdContributions();
+  const retContribs=_yi.chase.retirement+_yi.victoria.retirement+_yi.chase.roth+_yi.victoria.roth+_yi.chase.hsa;
   const savingsRate=annualGross>0?(retContribs/annualGross*100):13.9;
   const srBar=document.getElementById('inc-sr-bar');
   if(srBar)srBar.style.width=Math.min(savingsRate/50*100,100)+'%';
