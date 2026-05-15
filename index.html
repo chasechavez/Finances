@@ -1155,9 +1155,13 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           <span class="settings-value" onclick="openApiKeyModal()" id="apikey-display">Set Key →</span>
         </div>
         <div class="settings-row">
-          <div><div class="settings-label">Confidence Threshold</div><div class="settings-desc">Below this % gets sent to Review</div></div>
-          <select class="input-field" style="width:80px;padding:4px 8px;font-size:11px" id="conf-threshold" onchange="saveSettings()">
-            <option value="70">70%</option><option value="80" selected>80%</option><option value="90">90%</option><option value="100">Rules Only</option>
+          <div><div class="settings-label">Confidence Threshold</div><div class="settings-desc">Below this % gets sent to Review. Lower = more hands-off.</div></div>
+          <select class="input-field" style="width:120px;padding:4px 8px;font-size:11px" id="conf-threshold" onchange="saveSettings()">
+            <option value="50">50% (hands-off)</option>
+            <option value="70">70% (light review)</option>
+            <option value="80" selected>80% (default)</option>
+            <option value="90">90% (strict)</option>
+            <option value="100">Rules Only (no AI auto-commit)</option>
           </select>
         </div>
       </div>
@@ -1187,6 +1191,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
         <div class="settings-row"><div><div class="settings-label">Import Backup</div><div class="settings-desc">Restore from JSON backup</div></div><label class="btn btn-ghost btn-sm" style="cursor:pointer">Import<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label></div>
         <div class="settings-row"><div><div class="settings-label">Clear All Data</div><div class="settings-desc">Wipe localStorage — irreversible</div></div><button class="btn btn-danger btn-sm" onclick="confirmClearAll()">Clear</button></div>
         <div class="settings-row"><div><div class="settings-label">Reset Spending Only</div><div class="settings-desc">Clear transactions &amp; hashes — keeps accounts &amp; balances</div></div><button class="btn btn-danger btn-sm" onclick="confirmClearSpending()">Reset</button></div>
+        <div class="settings-row"><div><div class="settings-label">Reset Income Only</div><div class="settings-desc">Clear income deposits — keeps spending &amp; balances. Use to fix duplicate income.</div></div><button class="btn btn-danger btn-sm" onclick="confirmClearIncome()">Reset</button></div>
       </div>
     </div>
   </div>
@@ -1337,26 +1342,36 @@ const CC_PAYMENT_RULES=[
 const BANK_SKIP=[
   /payroll|direct.?pay|direct\s*dep/i,
   /orlando\s*health.*payroll/i,
-  /leavitt\s*medical.*payroll/i,
-  /^transfer\s*(to|from)/i,
+  /leavitt.*payroll/i,
+  /\btransfer\s*(to|from)/i,
   /victoria\s*dukhara.*extransfer/i,
-  /sccu\s*extrnal\s*tfr|a2a\s*xfer/i,
+  // FIX: real Keybank desc is "A2A XFERS" (plural). Old regex /a2a\s*xfer\b/ failed
+  // because \b before S didn't match. Drop the boundary, allow plural.
+  /sccu\s*extrnal\s*tfr|a2a\s*xfers?/i,
   /moneyline\s+\d/i,
-  /^deposit\s/i,
-  /^credit\s+interest/i,
+  /\bdeposit\s/i,
+  /\bcredit\s+interest|interest\s+payment/i,
   /capital\s*one.*crcardpmt/i,
   // Skip CC payments going OUT of bank account
   /crcardpmt|creditcard.*pmt|cc\s*pmt|credit\s*card\s*pmt/i,
+  // Defensive skip for CC-payment-out-of-bank descriptions. Keybank doesn't
+  // normally pay your credit cards, but one-off CHASE CREDIT CRDEPAY appeared
+  // on 01/12/2026. Skipping prevents double-counting (CC balance is tracked
+  // separately on the credit-card side).
+  /\bchase\s+credit\s+crd|crdepay|crd\s*e\s*pay/i,
   /autopay.*credit|credit.*autopay/i,
-  // Skip large Zelle/ACH transfers (internal money movement)
-  /^zelle\s*(transfer|pmt|payment|w\/d)/i,
-  /^ach\s*(transfer|debit|credit)/i,
-  /^online\s*(transfer|xfr|banking\s*transfer)/i,
-  /^mobile\s*(transfer|banking)/i,
-  /^wire\s*(transfer|out|in)/i,
+  // Skip Zelle anywhere in description (was: ^zelle only). Real descriptions
+  // are mid-string like "ZELLE W/D ARTHUR RAFF XXXX".
+  /\bzelle\s*(transfer|pmt|payment|w\/?d|dep|received)/i,
+  /\bach[,\s]*(transfer|debit|credit|sccu|victoria)/i,
+  /\bonline\s*(transfer|xfr|banking\s*transfer)/i,
+  /\bmobile\s*(transfer|banking)/i,
+  /\bwire\s*(transfer|out|in)/i,
+  /\binternet\s*trf|internal\s*transfer/i,
   // Skip loan payments (already tracked as debts)
   /student\s*loan|aidvantage|edfinancial|navient|ecsi|mohela|fedloan|great\s*lakes|nelnet/i,
-  /synchrony\s*(bank)?\s*(pmt|payment)/i,
+  // NOTE: SYNCHRONY removed from skip — Synchrony is your real furniture creditor
+  // ($230/mo Rooms To Go), and BANK_RULES categorizes it as Debt Payments below.
   /capital\s*one\s*(pmt|payment|pymt)/i,
   /chase\s*(pmt|payment|card\s*pmt)/i,
   /citi\s*(pmt|payment|pymt|card)/i,
@@ -1368,13 +1383,33 @@ const BANK_SKIP=[
   /withdrawal\s+from.*credit.*(?:crd|card).*(?:epay|payment)/i,
   /withdrawal\s+from.*card.*(?:online\s*payment|epay)/i,
   /epay$/i,
-  /^mortgage\s*pmt|^loan\s*pmt/i,
+  /\bmortgage\s*pmt|\bloan\s*pmt/i,
+  // Skip checks — typically misc one-offs the user wrote manually
+  /^check\s*#/i,
+  // NOTE: IDFPR removed from skip — it's Victoria's Illinois professional license
+  // renewal ($500.75), categorized as Professional via BANK_RULES below.
 ];
-const BANK_RULES=[[/arthur\s*raff/i,'Housing'],[/jamestown|hoa\b/i,'Housing'],[/keybank\s*na\s*loan|mortgage.*pmt/i,'Debt Payments'],[/synchrony.*bank|synchrony.*payment/i,'Debt Payments'],[/duke\s*energy|fpl\b|florida\s*power/i,'Household Supplies'],[/spectrum|comcast|xfinity/i,'Subscriptions'],[/city\s*of\s*altamonte|altamontut/i,'Household Supplies'],[/fid\s*bkg\s*svc|fidelity.*moneyline/i,null]];
+// BANK_RULES: explicit categorizations. These run BEFORE BANK_SKIP so a rule
+// match always wins, even if a skip pattern would otherwise drop it (e.g. Arthur
+// Raff is paid via Zelle — without this priority, the Zelle skip would catch it).
+const BANK_RULES=[
+  [/arthur\s*raff/i,'Housing'],
+  [/jamestown|hoa\b/i,'Housing'],
+  [/keybank\s*na\s*loan|mortgage.*pmt/i,'Debt Payments'],
+  [/synchrony.*bank|synchrony.*payment/i,'Debt Payments'],
+  [/duke\s*energy|fpl\b|florida\s*power/i,'Household Supplies'],
+  [/spectrum|comcast|xfinity/i,'Subscriptions'],
+  [/city\s*of\s*altamonte|altamontut/i,'Household Supplies'],
+  [/nintendo|playstation\s*network|xbox\s*live/i,'Subscriptions'],
+  [/idfpr|professional\s*regulation|medical\s*license|board\s*of\s*medicine/i,'Professional'],
+  [/fid\s*bkg\s*svc|fidelity.*moneyline/i,null],
+];
 
 function categorizeBank(txn){
-  if(BANK_SKIP.some(r=>r.test(txn.description)))return null;
+  // Explicit rules win over generic skip patterns. This lets Arthur Raff (Housing)
+  // beat the Zelle-W/D skip, Synchrony (Debt Payments) beat any payment-skip, etc.
   for(const[regex,cat]of BANK_RULES){if(regex.test(txn.description))return cat;}
+  if(BANK_SKIP.some(r=>r.test(txn.description)))return null;
   // Skip large unrecognized bank transactions (likely transfers/CC payments)
   // These almost certainly aren't consumer spending — but only if no specific rule matched above
   const generalCat = categorizeTransaction(txn);
@@ -1453,8 +1488,381 @@ function parseRobinhoodCSV(csvText){
   return{accountNumber:'robinhood',accountType:'Robinhood',transactions:txns};
 }
 
+// ── NEW: Fidelity Statement parser ────────────────────────────────────────────
+// Parses month-end Fidelity statements (NOT transaction history). Files are
+// named `Statement####YYYY.csv` and contain:
+//   Row 1: Account Type, Account, Beginning mkt Value, ..., Ending mkt Value, ...
+//   Row 2: ROTH IRA, 233896130, 35550.15, ..., 37200.94, ...
+//   (blank rows)
+//   Row 5: Symbol/CUSIP, Description, Quantity, Price, Beginning Value, Ending Value, Cost Basis
+//   (blank rows)
+//   Per-section: account#, sectionLabel (Stocks/Mutual Funds/Core Account)
+//   Then holdings rows: SYMBOL, DESC, QTY, PRICE, BEGIN_VAL, END_VAL, COST_BASIS
+//   Subtotal of <section>, ...
+//
+// Returns: {accountNumber, accountType, endingValue, beginningValue, holdings, statementDate}
+function parseFidelityStatementCSV(csvText, filename){
+  const lines = csvText.replace(/^\uFEFF/,'').split('\n');
+  if(lines.length < 2) return null;
+
+  // Parse header row 1 + data row 2 (account-level summary)
+  const headerRow = Papa.parse(lines[0]).data[0] || [];
+  const dataRow = Papa.parse(lines[1]).data[0] || [];
+  if(!headerRow.some(h=>/Ending\s+mkt\s+Value/i.test(h||''))) return null;
+
+  // Index lookup
+  const idx = (name) => headerRow.findIndex(h => new RegExp(name,'i').test((h||'').trim()));
+  const accountType = (dataRow[idx('Account Type')]||'').trim();
+  const accountNumber = (dataRow[idx('^Account$')]||'').trim();
+  const beginningValue = parseFloat((dataRow[idx('Beginning mkt')]||'0').replace(/[,$]/g,''))||0;
+  const endingValue = parseFloat((dataRow[idx('Ending mkt')]||'0').replace(/[,$]/g,''))||0;
+  if(!accountNumber || !endingValue) return null;
+
+  // Statement date from filename: Statement4302026.csv → 04/30/2026 (M/D/Y)
+  let statementDate = null;
+  const fnMatch = (filename||'').match(/Statement(\d{1,2})(\d{2})(\d{4})/i);
+  if(fnMatch){
+    const mo = String(fnMatch[1]).padStart(2,'0');
+    const dy = fnMatch[2];
+    const yr = fnMatch[3];
+    statementDate = `${yr}-${mo}-${dy}`;
+  }
+
+  // Parse holdings (rows between the second header and the trailing summaries)
+  // Holdings rows have 7 comma fields: SYMBOL, DESC, QTY, PRICE, BEGIN, END, COST_BASIS
+  const holdings = [];
+  let inHoldings = false;
+  for(const rawLine of lines.slice(2)){
+    const line = rawLine.trim();
+    if(!line) continue;
+    if(/^Symbol\/CUSIP/i.test(line)){inHoldings = true; continue;}
+    if(!inHoldings) continue;
+    if(/^Subtotal\s+of/i.test(line)) continue;
+    // Skip section dividers like "233896130" alone or "Stocks", "Mutual Funds", "Core Account"
+    if(/^(Stocks|Mutual Funds|Core Account|Bonds|Options|ETFs)$/i.test(line)) continue;
+    if(/^[A-Z0-9]{4,12}\s*$/.test(line) && !line.includes(',')) continue; // bare account number row
+    const fields = Papa.parse(line).data[0];
+    if(!fields || fields.length < 5) continue;
+    const symbol = (fields[0]||'').trim();
+    if(!symbol || /^Symbol/i.test(symbol)) continue;
+    const description = (fields[1]||'').trim();
+    const quantity = parseFloat((fields[2]||'0').replace(/[,$]/g,''))||0;
+    const price = parseFloat((fields[3]||'0').replace(/[,$]/g,''))||0;
+    const endVal = parseFloat((fields[5]||'0').replace(/[,$]/g,''))||0;
+    if(!symbol || !endVal) continue;
+    holdings.push({symbol, description, quantity, price, endValue: endVal});
+  }
+
+  return {accountNumber, accountType, endingValue, beginningValue, holdings, statementDate, filename};
+}
+
+// ── NEW: HealthEquity HSA monthly statement PDF parser ────────────────────────
+// Parses HealthEquity HSA "Account Statement" PDFs. These have TWO balances:
+//   1. CASH balance (Pacific Life, displayed in transaction ledger Account Balance col)
+//   2. INVESTMENT portfolio (separate section, "Closing Account Value")
+// True HSA balance = cash + invested. The current dashboard's `hsa` field is the
+// combined total.
+//
+// Transactions in the cash ledger include:
+//   - Employee Contribution for YYYY (payroll deferral)
+//   - Employer Contribution for YYYY (employer match)
+//   - Investment Admin Fee MMM YYYY (Health Equity fee on invested $)
+//   - Investment: SYMBOL (cash → invested transfers, negative on cash side)
+//   - Card: MERCHANT (medical card swipe, negative on cash side)
+//   - Interest for M/D/YYYY - M/D/YYYY (small interest credit)
+//
+// IMPORTANT: We do NOT add card-swipe transactions to the user's bank-side spending
+// tracker — they're HSA-funded medical expenses, not cash-flow spending. They
+// already show up as a decrease in cash HSA balance. We DO surface them in the
+// import summary for visibility (WCI Stealth IRA strategy is to pay out-of-pocket
+// and save receipts, so card swipes are worth noticing).
+function parseHealthEquityHsaPdf(text){
+  // Statement period
+  const periodM = text.match(/Period:\s*(\d{2}\/\d{2}\/\d{2,4})\s+through\s+(\d{2}\/\d{2}\/\d{2,4})/i);
+  let statementDate = null, periodStart = null, periodEnd = null;
+  if(periodM){
+    const toIso = (s) => {
+      const [m,d,y] = s.split('/');
+      const yr = y.length === 2 ? '20'+y : y;
+      return `${yr}-${m}-${d}`;
+    };
+    periodStart = toIso(periodM[1]);
+    periodEnd = toIso(periodM[2]);
+    statementDate = periodEnd;
+  }
+
+  // Cash balances. PDF format: `Beginning Balance $ 2,003.75` and `Ending Balance $ 2,285.16`
+  const begM = text.match(/Beginning Balance\s*\$\s*([\d,]+\.\d{2})/i);
+  const endM = text.match(/Ending Balance\s*\$\s*([\d,]+\.\d{2})/i);
+  const cashBeginning = begM ? parseFloat(begM[1].replace(/,/g,'')) : null;
+  const cashEnding = endM ? parseFloat(endM[1].replace(/,/g,'')) : null;
+
+  // Invested balance. PDF: `Closing Account Value $ 13,160.60`
+  const invM = text.match(/Closing Account Value\s*\$\s*([\d,]+\.\d{2})/i);
+  const investedClosing = invM ? parseFloat(invM[1].replace(/,/g,'')) : 0;
+
+  if(cashEnding === null) return null;
+
+  const totalEnding = cashEnding + investedClosing;
+
+  // Holdings table — pattern: `VTTSX VANGUARD TARGET RETIREMENT\n2060 FUND 200.13 65.22 13,052.67`
+  // Note: investment name often wraps across two lines. Use the line with shares/price/value.
+  const holdings = [];
+  const lines = text.split('\n');
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i].replace(/\s+/g,' ').trim();
+    // Pattern: "<words> <shares> <price> <value>" where shares has decimals,
+    // price has decimals, value has thousands-separators+decimals.
+    // Example: "2060 FUND 200.13 65.22 13,052.67"
+    //          "VBMPX VANGUARD TOTAL BOND MARKET IDX INSTLPLS 145.02 9.66 1,400.92"
+    const m = line.match(/^(.+?)\s+([\d,]+\.\d{2,4})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s*$/);
+    if(!m) continue;
+    const shares = parseFloat(m[2].replace(/,/g,''));
+    const price = parseFloat(m[3].replace(/,/g,''));
+    const value = parseFloat(m[4].replace(/,/g,''));
+    // Sanity check: shares × price ≈ value (within $1 for rounding)
+    if(Math.abs(shares * price - value) > 1.0) continue;
+    let name = m[1].trim();
+    // Filter out non-holding rows (interest rate table, etc.)
+    if(/^(total|over|admin|funds are|interest|balance|tier|average daily|deposit|withdrawal|account)/i.test(name)) continue;
+    // Prepend continuation line if it looks like a holding-name prefix
+    if(i > 0){
+      const prev = lines[i-1].trim();
+      if(/^[A-Z]{3,6}\s+[A-Z]/.test(prev) && prev.length < 60 && !/\$|\d{3,}/.test(prev)){
+        name = prev.replace(/\s+/g,' ') + ' ' + name;
+      }
+    }
+    holdings.push({ symbol: name.split(/\s+/)[0], description: name, shares, price, value });
+  }
+
+  // Transaction ledger — extract each cash-side row and categorize.
+  // Each row looks like: `MM/DD/YYYY DESCRIPTION (NEGATIVE)|POSITIVE BALANCE` after pdf-parse.
+  // BUT some rows wrap across multiple lines, e.g.:
+  //   L21: `04/02/2026 Investment Admin Fee March 2026. Average`
+  //   L22: `HealthEquity investments of $13,327.94 at 0.0300%.`
+  //   L23: `(4.00) 2,316.13`
+  // Merge continuation lines onto the dated parent until we find the amount+balance.
+  const txns = [];
+  let employeeContrib = 0, employerContrib = 0, fees = 0, interest = 0;
+  const cardSpending = [];
+  const investmentTransfers = [];
+
+  // Build merged logical transaction lines first
+  const STOP_PATTERNS = /^(Beginning|Ending|Investment Portfolio|Interest Rate|Funds are|Personal|Account Statement|15 West|Chase Chavez|Draper|If you|Phone:|Fax:|Page \d|Total|Balance Tier|VTTSX|VBMPX|HealthEquity Trust|IMPORTANT|You should|This section|Tier|Symbol|Fund\b|Category|Shares|Closing)/i;
+  const AMT_BAL_RE = /(?:\(([\d,]+\.\d{2})\)|(-?[\d,]+\.\d{2}))\s+([\d,]+\.\d{2})\s*$/;
+  const logicalLines = [];
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i].trim();
+    if(!line) continue;
+    const dm = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+/);
+    if(!dm) continue;
+    let merged = line;
+    // If amount already on this line, done
+    if(!AMT_BAL_RE.test(merged)){
+      // Peek ahead up to 3 lines for the continuation containing the amount
+      for(let j = 1; j <= 3 && i + j < lines.length; j++){
+        const next = lines[i+j].trim();
+        if(!next) continue;
+        if(/^\d{2}\/\d{2}\/\d{4}/.test(next)) break; // new transaction starts
+        if(STOP_PATTERNS.test(next)) break;
+        merged = merged + ' ' + next;
+        if(AMT_BAL_RE.test(merged)) break;
+      }
+    }
+    logicalLines.push(merged);
+  }
+
+  for(const line of logicalLines){
+    const dm = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(.+)$/);
+    if(!dm) continue;
+    const date = dm[1];
+    const rest = dm[2];
+
+    // Amount: prefer parenthesized negative `(4.00)`, else trailing signed `142.31`
+    const amtM = rest.match(AMT_BAL_RE);
+    if(!amtM) continue;
+    let amount;
+    if(amtM[1]) amount = -parseFloat(amtM[1].replace(/,/g,''));
+    else amount = parseFloat(amtM[2].replace(/,/g,''));
+
+    // Strip trailing amount+balance from description
+    const desc = rest.replace(AMT_BAL_RE, '').trim();
+
+    let type = 'other';
+    if(/employee contribution/i.test(desc)){ type = 'employee_contrib'; employeeContrib += Math.abs(amount); }
+    else if(/employer contribution/i.test(desc)){ type = 'employer_contrib'; employerContrib += Math.abs(amount); }
+    else if(/investment admin fee/i.test(desc)){ type = 'fee'; fees += Math.abs(amount); }
+    else if(/^investment:\s/i.test(desc)){ type = 'investment_transfer'; investmentTransfers.push({date, desc, amount: Math.abs(amount)}); }
+    else if(/^card:\s/i.test(desc)){ type = 'card_spend'; cardSpending.push({date, desc, amount: Math.abs(amount)}); }
+    else if(/^interest\b/i.test(desc) || (!desc && amount > 0 && amount < 1)){ type = 'interest'; interest += amount; }
+
+    txns.push({date, desc, amount, type});
+  }
+
+  // Personal Rate of Return — for the statement period
+  // Format: `Statement Period: 6.69 %` or `Statement Period: ( 5.57 % )` (negative)
+  const rorPM = text.match(/Statement Period:\s*\(?\s*(-?\d+(?:\.\d+)?)\s*%\s*\)?/i);
+  const rorYM = text.match(/Year To Date:\s*\(?\s*(-?\d+(?:\.\d+)?)\s*%\s*\)?/i);
+  // ROR appears twice in the PDF (once in summary, once in period); the period one is what we want
+  let periodReturn = null;
+  if(rorPM){
+    let v = parseFloat(rorPM[1]);
+    // Parenthesized negative
+    if(text.match(/Statement Period:\s*\([^)]*\)/)) v = -Math.abs(v);
+    periodReturn = v;
+  }
+  let ytdReturn = null;
+  if(rorYM){
+    let v = parseFloat(rorYM[1]);
+    if(text.match(/Year To Date:\s*\([^)]*\)/)) v = -Math.abs(v);
+    ytdReturn = v;
+  }
+
+  return {
+    accountNumber: '23720088',
+    accountType: 'HSA',
+    statementDate, periodStart, periodEnd,
+    cashBeginning, cashEnding, investedClosing, totalEnding,
+    holdings,
+    transactions: txns,
+    employeeContrib, employerContrib, totalContrib: employeeContrib + employerContrib,
+    fees, interest,
+    cardSpending, cardSpendingTotal: cardSpending.reduce((s,c)=>s+c.amount,0),
+    investmentTransfers, investmentTransfersTotal: investmentTransfers.reduce((s,t)=>s+t.amount,0),
+    periodReturn, ytdReturn,
+  };
+}
+
+// ── NEW: Fidelity NetBenefits 403b PDF parser ─────────────────────────────────
+// Parses Fidelity NetBenefits "Statement Details" PDF (workplace 403b/401k).
+// This is the source for the 403b BALANCE — the History CSV only gives
+// contributions, not balance. Format (pdf-parse output with tabs as separators):
+//
+//   Beginning Balance \t$47,192.01
+//   Employee Contributions \t$2,079.80
+//   Employer Contributions \t$1,375.70
+//   Fees \t-$16.75
+//   Ending Balance \t$55,789.35
+//   Statement Period: 01/01/2026 to 05/14/2026
+//
+// Returns: {endingBalance, beginningBalance, employeeContrib, employerContrib,
+//          totalContrib, statementDate, holdings, personalReturn}
+function parseFidelityNetBenefitsPdf(text){
+  // Statement period: end date is what matters for "most recent wins" logic
+  const periodM = text.match(/Statement Period:\s*(\d{2}\/\d{2}\/\d{4})\s+to\s+(\d{2}\/\d{2}\/\d{4})/i);
+  let statementDate = null;
+  if(periodM){
+    const end = periodM[2];
+    const [mo,dy,yr] = end.split('/');
+    statementDate = `${yr}-${mo}-${dy}`;
+  }
+
+  const grab = (label) => {
+    // Match `Label \t$AMOUNT` or `Label -$AMOUNT` (the minus can be before OR
+    // after the $ in Fidelity's exports — Fees row in PDFs renders as `-$16.75`).
+    const re = new RegExp(label + '\\s*(-)?\\$?(-)?([\\d,]+\\.\\d{2})', 'i');
+    const m = text.match(re);
+    if(!m) return null;
+    const negative = m[1] === '-' || m[2] === '-';
+    return parseFloat(m[3].replace(/,/g, '')) * (negative ? -1 : 1);
+  };
+
+  const beginningBalance = grab('Beginning Balance');
+  const endingBalance = grab('Ending Balance');
+  const employeeContrib = grab('Employee Contributions') || 0;
+  const employerContrib = grab('Employer Contributions') || 0;
+  const fees = grab('Fees') || 0;
+  const change = grab('Change in Account Value') || 0;
+
+  if(endingBalance === null) return null; // not a parseable NetBenefits statement
+
+  const totalContrib = employeeContrib + employerContrib;
+
+  // Personal Rate of Return
+  const rorM = text.match(/Personal Rate of Return[\s\S]{0,80}?(-?\d{1,3}(?:\.\d+)?)\s*%/i);
+  const personalReturn = rorM ? parseFloat(rorM[1]) : null;
+
+  // Holdings: extract from the Account Value table.
+  // Pattern: `TRP Retire\n2055 I \t2,074.374 \t2,220.030 \t$22.75 \t$25.13 \t$47,192.01 \t$55,789.35`
+  // pdf-parse may split investment names across lines. Robust approach: scan
+  // every line for the cluster pattern of `qty qty $price $price $val $val`.
+  const holdings = [];
+  const lines = text.split('\n');
+  for(let i = 0; i < lines.length; i++){
+    const line = lines[i].replace(/\s+/g, ' ').trim();
+    // Look for: NAME ...  NUM NUM $PRICE $PRICE $VAL $VAL
+    const m = line.match(/^(.+?)\s+([\d,]+\.\d{3})\s+([\d,]+\.\d{3})\s+\$([\d,]+\.\d{2})\s+\$([\d,]+\.\d{2})\s+\$([\d,]+\.\d{2})\s+\$([\d,]+\.\d{2})\s*$/);
+    if(!m) continue;
+    let name = m[1].trim();
+    // If line started right after an investment-name continuation (prev line had partial name like "TRP Retire"),
+    // prepend prev line.
+    if(i > 0 && /^[A-Z]/.test(lines[i-1].trim()) && !/\$|\d/.test(lines[i-1])){
+      const prev = lines[i-1].trim();
+      if(prev.length < 40) name = prev + ' ' + name;
+    }
+    if(/account totals|blended fund/i.test(name)) continue;
+    holdings.push({
+      symbol: name,
+      description: name,
+      quantity: parseFloat(m[3].replace(/,/g, '')),
+      price: parseFloat(m[5].replace(/,/g, '')),
+      endValue: parseFloat(m[7].replace(/,/g, '')),
+      beginShares: parseFloat(m[2].replace(/,/g, '')),
+      beginValue: parseFloat(m[6].replace(/,/g, '')),
+    });
+  }
+
+  return {
+    accountNumber: '38187',
+    accountType: '403b',
+    beginningBalance,
+    endingBalance,
+    employeeContrib,
+    employerContrib,
+    totalContrib,
+    fees,
+    change,
+    statementDate,
+    holdings,
+    personalReturn,
+  };
+}
+
+// ── NEW: Aidvantage payment history parser ────────────────────────────────────
+// Aidvantage's CSV export is preceded by `<!DOCTYPE HTML>` (their bug). Format:
+//   Date, Description, Principal, Interest, Fees, Total
+//   04/23/2026, PAYMENT, -$77.00, -$23.00, $0.00, -$100.00
+//
+// We don't add these to spending (the bank-side payment is already categorized as
+// Debt Payments). Instead we return a summary for an informational toast and
+// store the most recent payment date for the dashboard.
+function parseAidvantageCSV(csvText){
+  const cleaned = csvText.replace(/^<![\s\S]*?>/, '').trim();
+  const result = Papa.parse(cleaned, {header:true, skipEmptyLines:true});
+  if(!result.data || !result.data.length) return null;
+  const payments = [];
+  let totalPrincipal=0, totalInterest=0, totalPaid=0;
+  for(const row of result.data){
+    const date = (row['Date']||'').trim();
+    const desc = (row['Description']||'').trim();
+    if(!date || !desc) continue;
+    const principal = Math.abs(parseFloat((row['Principal']||'0').replace(/[$,]/g,''))||0);
+    const interest = Math.abs(parseFloat((row['Interest']||'0').replace(/[$,]/g,''))||0);
+    const total = Math.abs(parseFloat((row['Total']||'0').replace(/[$,]/g,''))||0);
+    if(!total) continue;
+    totalPrincipal += principal;
+    totalInterest += interest;
+    totalPaid += total;
+    payments.push({date, principal, interest, total});
+  }
+  return {payments, totalPrincipal, totalInterest, totalPaid};
+}
+
 function detectInvCSV(headers,csvText){
   const hn=headers.map(h=>h.trim().toLowerCase());
+  // Fidelity month-end statement (positions/balance snapshot) — has "Account Type"
+  // + "Ending mkt Value" cols. THIS IS NOT TRANSACTION HISTORY.
+  if(hn.some(h=>/account\s*type/i.test(h)) && hn.some(h=>/ending\s*mkt\s*value/i.test(h))) return 'fidelityStatement';
   if(hn.includes('run date')&&hn.includes('account')&&hn.includes('account number'))return'fidelityMulti';
   if(hn.includes('run date')&&hn.some(h=>h.includes('cash balance')))return'fidelityRoth';
   if(hn.includes('investment')&&hn.includes('transaction type')&&hn.some(h=>h.includes('shares')))return'fidelity403b';
@@ -1483,10 +1891,53 @@ function processInvCSV(invType,csvText,filename){
   if(invType==='fidelityMulti'){
     const accounts=parseFidelityMultiCSV(csvText);
     for(const acct of accounts){const meta=INV_ACCT_MAP[acct.accountNumber]||{label:`Fidelity ${acct.accountType}`,owner:'Chase',type:acct.accountType,color:'#38bdf8'};const key=`fidelity_${acct.accountNumber}`;const added=mergeInvestAccount(key,{...meta,accountNumber:acct.accountNumber,custodian:'Fidelity'},acct.transactions);results.push({label:meta.label,added});}
+  }else if(invType==='fidelityStatement'){
+    // Month-end positions snapshot → updates account balance directly, not transactions.
+    // Multiple statements imported → most recent statement date wins.
+    const parsed = parseFidelityStatementCSV(csvText, filename);
+    if(parsed){
+      const acctMap = {
+        '233896130': {balanceField:'chaseRoth', label:'Fidelity Roth IRA'},
+        'Z09771783': {balanceField:'fidelityBrok', label:'Fidelity Brokerage'},
+        '38187': {balanceField:'chase403b', label:'Fidelity 403b'},
+      };
+      const m = acctMap[parsed.accountNumber];
+      if(m){
+        // Track which statement date set this balance — only let newer ones overwrite
+        if(!STATE.balanceLog) STATE.balanceLog = {};
+        const prev = STATE.balanceLog[m.balanceField];
+        if(!prev || (parsed.statementDate && parsed.statementDate > prev.date)){
+          STATE.accounts[m.balanceField] = parsed.endingValue;
+          STATE.balanceLog[m.balanceField] = {date: parsed.statementDate, value: parsed.endingValue, holdings: parsed.holdings};
+          // Reflect in UI input if visible
+          const el = document.getElementById('a-'+m.balanceField);
+          if(el) el.value = parsed.endingValue;
+        }
+        const change = parsed.endingValue - parsed.beginningValue;
+        const sign = change>=0 ? '+' : '';
+        results.push({label:`${m.label}: $${parsed.endingValue.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} (${sign}$${Math.abs(change).toFixed(2)})`, added:parsed.holdings.length});
+      }else{
+        results.push({label:`Unknown Fidelity account ${parsed.accountNumber} — skipped`, added:0});
+      }
+    }
   }else if(invType==='fidelityRoth'){
     const acctNum=acctNumFromFile(filename)||'233896130';const parsed=parseFidelityRothCSV(csvText,acctNum);if(parsed){const meta=INV_ACCT_MAP[parsed.accountNumber]||{label:'Fidelity Roth IRA',owner:'Chase',type:'Roth IRA',color:'#10b981'};const added=mergeInvestAccount(`fidelity_${parsed.accountNumber}`,{...meta,accountNumber:parsed.accountNumber,custodian:'Fidelity'},parsed.transactions);results.push({label:meta.label,added});}
   }else if(invType==='fidelity403b'){
     const parsed=parseFidelity403bCSV(csvText);if(parsed){const meta=INV_ACCT_MAP['38187'];const added=mergeInvestAccount('fidelity_38187',{...meta,accountNumber:'38187',custodian:'Fidelity'},parsed.transactions);results.push({label:meta.label,added});}
+    // Also: sum YTD contributions from this file and update chase403bContrib field
+    const parsed2=parseFidelity403bCSV(csvText);
+    if(parsed2){
+      const currentYear = new Date().getFullYear();
+      const ytdContribs = parsed2.transactions
+        .filter(t=>/contribution/i.test(t.rawAction||''))
+        .filter(t=>{const y = (t.date||'').match(/(20\d{2})/); return y && parseInt(y[1])===currentYear;})
+        .reduce((s,t)=>s+(t.amount||0), 0);
+      if(ytdContribs>0){
+        STATE.accounts.chase403bContrib = ytdContribs;
+        const el = document.getElementById('a-chase403bContrib');
+        if(el) el.value = ytdContribs.toFixed(2);
+      }
+    }
   }else if(invType==='robinhood'){
     const parsed=parseRobinhoodCSV(csvText);if(parsed){const added=mergeInvestAccount('robinhood',{...INV_ACCT_MAP['robinhood'],accountNumber:'robinhood',custodian:'Robinhood'},parsed.transactions);results.push({label:'Robinhood',added});}
   }
@@ -1514,7 +1965,15 @@ function detectFromPdfText(text,filename){
   if(t.includes('ally bank')||(t.includes('ally')&&t.includes('savings account')))return{cardKey:'ally',profile:CARD_PROFILES.ally,confidence:'high',isPdf:true,isBank:true,balanceOnly:true};
   if(t.includes('space coast credit union')||t.includes('sccu.com'))return{cardKey:'sccu_multi',profile:null,confidence:'high',isPdf:true,isMulti:true};
   if(t.includes('aidvantage'))return{cardKey:'aidvantage_loan',profile:null,confidence:'high',isPdf:true,isLoan:true};
-  if(t.includes('15 west scenic pointe')||t.includes('health equity')||(t.includes('health savings account')&&t.includes('draper')))return{cardKey:'hsa_he',profile:null,confidence:'high',isPdf:true,balanceOnly:true,isHSA:true};
+  if(t.includes('15 west scenic pointe')||t.includes('health equity')||(t.includes('health savings account')&&t.includes('draper')))return{cardKey:'hsa_he',profile:null,confidence:'high',isPdf:true,isHSA:true};
+  // Fidelity NetBenefits 403b — workplace retirement plan statement. Detection keys:
+  //   - "NetBenefits" + "Retirement Savings Statement"
+  //   - "Orlando Health" + "Retirement Savings"
+  //   - "workplaceservices.fidelity.com" URL in footer
+  if(/netbenefits/i.test(text) && /retirement\s*savings\s*statement/i.test(text))
+    return{cardKey:'fidelity_403b_nb',profile:null,confidence:'high',isPdf:true,isInvestment:true,invType:'fidelity403bNetBenefits',balanceOnly:true};
+  if(t.includes('workplaceservices.fidelity.com') || (t.includes('orlando health')&&t.includes('retirement savings')))
+    return{cardKey:'fidelity_403b_nb',profile:null,confidence:'high',isPdf:true,isInvestment:true,invType:'fidelity403bNetBenefits',balanceOnly:true};
   const last4=extractLast4FromFilename(filename);
   if(last4&&STATE.last4Registry[last4]){const k=STATE.last4Registry[last4];return{cardKey:k,profile:CARD_PROFILES[k],confidence:'high',isPdf:true};}
   return null;
@@ -1612,7 +2071,20 @@ let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},re
 const DEFAULT_ACCOUNTS={chaseGross:8207,chaseTakeHome:3553.80,chaseMatch:5,vicGross:3864.50,vicTakeHome:2000,vicMatch:2,fixedExp:3500,emergMonths:6,emergFund:1006,hsa:11883.87,hsaContrib:138.47,aidvantage:49014.99,aidvantageRate:7.1,edfinancial:136388,edfinancialRate:6.6,ecsi:52092,ecsiRate:5.0,ufcom:11060,ufcomRate:6.0,auto:12241,autoRate:6.74,furniture:2075,mortgage:250000,origMortgage:285000,mortgageRate:6.875,chase403bContrib:4100,vic401kContrib:5029,chaseRothContrib:7000,vicRothContrib:2400};
 
 function loadState(){
-  try{const s=localStorage.getItem('wci_state_v6');if(s){const saved=JSON.parse(s);STATE={...STATE,...saved};}}catch(e){}
+  try{
+    const s=localStorage.getItem('wci_state_v6');
+    if(s){
+      const saved=JSON.parse(s);
+      // Deep-merge settings + ui to preserve new keys added in later versions
+      // (e.g. proxyUrl was missing from older saves and got wiped on shallow spread)
+      STATE = {
+        ...STATE,
+        ...saved,
+        settings: {...(STATE.settings||{}), ...(saved.settings||{})},
+        ui: {...(STATE.ui||{}), ...(saved.ui||{})}
+      };
+    }
+  }catch(e){console.error('[loadState]',e);}
   const now=new Date();
   STATE.ui=STATE.ui||{};
   STATE.ui.spendingMonth=STATE.ui.spendingMonth||`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -1624,12 +2096,55 @@ function loadState(){
   STATE.reviewQueue=STATE.reviewQueue||[];
   STATE.customRules=STATE.customRules||[];
   STATE.spendingHashes=STATE.spendingHashes||[];
+  STATE.settings=STATE.settings||{};
+  if(STATE.settings.confidenceThreshold==null)STATE.settings.confidenceThreshold=80;
   if(!STATE.accounts||Object.keys(STATE.accounts).length===0)STATE.accounts={...DEFAULT_ACCOUNTS};
   if(!STATE.last4Registry['8629'])STATE.last4Registry['8629']='chaseFreedom';
   if(!STATE.last4Registry['9323'])STATE.last4Registry['9323']='sapphire';
   applyTheme();
 }
-function saveState(){try{localStorage.setItem('wci_state_v6',JSON.stringify(STATE));}catch(e){}}
+function saveState(){
+  try{
+    const json = JSON.stringify(STATE);
+    localStorage.setItem('wci_state_v6', json);
+    return true;
+  }catch(e){
+    // localStorage quota exceeded — typically ~5MB. Try to recover by:
+    // 1. Pruning old _txns arrays (keep aggregate category totals, drop line-items > 6 months old)
+    // 2. Capping spendingHashes to most recent 10000
+    // 3. Trimming reviewQueue to non-reviewed only
+    console.error('[saveState] quota exceeded, attempting cleanup:', e.message);
+    try{
+      // Prune _txns older than 6 months — keeps your charts working but drops line-item history
+      const now=new Date();
+      const cutoff=`${now.getFullYear()}-${String(Math.max(now.getMonth()-5,1)).padStart(2,'0')}`;
+      let prunedTxns=0;
+      for(const monthKey of Object.keys(STATE.spending||{})){
+        if(monthKey < cutoff){
+          for(const cardKey of Object.keys(STATE.spending[monthKey])){
+            const cm = STATE.spending[monthKey][cardKey];
+            if(cm._txns){prunedTxns += cm._txns.length; delete cm._txns;}
+          }
+        }
+      }
+      // Cap hash list
+      if(STATE.spendingHashes && STATE.spendingHashes.length > 10000){
+        STATE.spendingHashes = STATE.spendingHashes.slice(-10000);
+      }
+      // Drop already-reviewed items still in queue
+      STATE.reviewQueue = (STATE.reviewQueue||[]).filter(t=>!t.reviewed);
+
+      localStorage.setItem('wci_state_v6', JSON.stringify(STATE));
+      showToast(`⚠ Storage cleanup: pruned ${prunedTxns} old line-items. Export backup soon!`,'error');
+      console.log('[saveState] recovered after cleanup');
+      return true;
+    }catch(e2){
+      console.error('[saveState] recovery failed:', e2);
+      showToast('⚠ Storage full — export backup NOW and Settings→Reset','error');
+      return false;
+    }
+  }
+}
 function toggleTheme(){const isLight=document.documentElement.classList.toggle('light-mode');document.getElementById('theme-btn').textContent=isLight?'☀️':'🌙';STATE.ui.lightMode=isLight;saveState();}
 function applyTheme(){if(STATE.ui?.lightMode){document.documentElement.classList.add('light-mode');const btn=document.getElementById('theme-btn');if(btn)btn.textContent='☀️';}}
 
@@ -1795,7 +2310,7 @@ async function handleFiles(files){
       }
     }
 
-    const statusLabel=detection.isInvestment?'Investment · '+detection.invType:detection.isSimplifi?'SCCU Checking':detection.isMulti?'SCCU Multi-Account':detection.isLoan?'Aidvantage Loan':detection.isHSA?'Health Equity HSA':detection.balanceOnly?(detection.cardKey==='ally'?'Ally Savings':'Balance Statement'):detection.profile?.label||'Unknown';
+    const statusLabel=detection.cardKey==='fidelity_403b_nb'?'Fidelity 403b (NetBenefits)':detection.isInvestment?'Investment · '+detection.invType:detection.isSimplifi?'SCCU Checking':detection.isMulti?'SCCU Multi-Account':detection.isLoan?'Aidvantage Loan':detection.isHSA?'Health Equity HSA':detection.balanceOnly?(detection.cardKey==='ally'?'Ally Savings':'Balance Statement'):detection.profile?.label||'Unknown';
     const item={file,filename:fn,csvText,pdfText,isPdf,cardKey:detection.cardKey,cardProfile:detection.profile,monthKey:monthYear.key,monthLabel:`${MONTHS[monthYear.month-1]} ${monthYear.year}`,confidence:detection.confidence,ambiguous:detection.ambiguous||false,candidates:detection.candidates||[],isMulti:detection.isMulti||false,isLoan:detection.isLoan||false,isBank:detection.isBank||false,isSimplifi:detection.isSimplifi||false,isInvestment:detection.isInvestment||false,invType:detection.invType||null,balanceOnly:detection.balanceOnly||false,isHSA:detection.isHSA||false,statusLabel,status:detection.cardKey?'ready':detection.ambiguous?'ambiguous':'unrecognized',txnCount:0};
     uploadQueue.push(item);
     if(detection.ambiguous&&detection.candidates?.length)await promptCardPick(uploadQueue.length-1);
@@ -1839,7 +2354,8 @@ function renderUploadQueue(){
     const metaText=item.cardProfile?`${item.cardProfile.label} · ${item.cardProfile.owner}${confBadge}`:item.ambiguous?`<span style="color:var(--warn)">⚠ Multiple Chase cards</span>`:(item.statusLabel&&item.statusLabel!=='Unknown')?`<span style="color:var(--accent)">${item.statusLabel}${confBadge}</span>`:`<span style="color:var(--danger)">⚠ Not recognized</span>`;
     return`<div class="queue-item"><div class="queue-dot dot-${item.status==='ready'?'ready':item.status==='done'?'done':item.status==='error'?'error':item.status==='ambiguous'?'ambiguous':'pending'}"></div><div class="queue-info"><div class="queue-name">${item.filename}</div><div class="queue-meta">${metaText} · ${item.monthLabel}</div>
           <div class="queue-meta" style="margin-top:2px">${item.status==='done'?
-            (item._committed>0?`✅ ${item._committed} committed to spending${item._review>0?' · '+item._review+' in review':''}${item._deduped>0?' · '+item._deduped+' already imported':''}`:
+            (item._summary?`💼 ${item._summary}`:
+             item._committed>0?`✅ ${item._committed} committed to spending${item._review>0?' · '+item._review+' in review':''}${item._deduped>0?' · '+item._deduped+' already imported':''}`:
              item._deduped>0?`⚠️ All ${item._deduped} already imported — go to Settings → Reset Spending to reimport`:
              item._review>0?`📋 ${item._review} sent to Review tab — go accept them`:
              '⚠️ 0 transactions found — check card detection above')
@@ -1850,12 +2366,26 @@ function renderUploadQueue(){
 
 // ── Capital One Venture X PDF Parser ─────────────────────────────────────────
 // Format: "Mar 9 Mar 11 MMS-OH JEWETTORLANDOFL $8.94"
+// IMPORTANT: Statements that cross a year boundary (e.g. "Dec 10, 2025 - Jan 09, 2026")
+// must assign December transactions to 2025 and January transactions to 2026. The
+// old code grabbed the first 4-digit year and applied it to every row, which put
+// Dec rows in the wrong year and bucketed them into the wrong dashboard month.
 function parseCapOneVenturePdf(text) {
   const txns = [];
   const MONTHS = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-  let year = new Date().getFullYear().toString();
-  const yearM = text.match(/\b(20\d{2})\b/);
-  if (yearM) year = yearM[1];
+
+  // Detect billing cycle: "Dec 10, 2025 - Jan 09, 2026" or "Mar 10, 2026 - Apr 09, 2026"
+  // Capture (firstMonth, firstYear, secondMonth, secondYear) so we can pick year per txn.
+  const cycle = text.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s*(20\d{2})\s*[-–]\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s*(20\d{2})/i);
+  let cycleFirstMonth = null, cycleFirstYear = null, cycleSecondYear = null;
+  if (cycle) {
+    cycleFirstMonth = MONTHS[cycle[1].toLowerCase()];
+    cycleFirstYear = cycle[2];
+    cycleSecondYear = cycle[4];
+  }
+  // Fallback for statements without a discoverable cycle line
+  const fallbackYear = (text.match(/\b(20\d{2})\b/) || [, new Date().getFullYear().toString()])[1];
+
   const lines = text.split('\n');
   let inTxns = false;
   for (const line of lines) {
@@ -1874,8 +2404,15 @@ function parseCapOneVenturePdf(text) {
     const amount = parseFloat(amtStr.replace(/,/g, ''));
     if (!amount || amount <= 0) continue;
     if (neg || /autopay|payment/i.test(desc)) continue;
+    // Pick the year that matches THIS transaction's month, not just the statement's "first" year
+    let year = fallbackYear;
+    if (cycleFirstMonth !== null) {
+      year = monthNum === cycleFirstMonth ? cycleFirstYear : cycleSecondYear;
+    }
     const dateStr = String(monthNum).padStart(2,'0') + '/' + String(day).padStart(2,'0') + '/' + year;
-    txns.push({ id: Math.random().toString(36).slice(2), date: dateStr, description: desc.trim(), amount, isCredit: false, hintCategory: '' });
+    // Clean description: collapse internal tabs/whitespace runs (pdf-parse output has tabs)
+    const cleanDesc = desc.replace(/\s+/g, ' ').trim();
+    txns.push({ id: Math.random().toString(36).slice(2), date: dateStr, description: cleanDesc, amount, isCredit: false, hintCategory: '' });
   }
   return txns;
 }
@@ -1884,19 +2421,32 @@ function parseCapOneVenturePdf(text) {
 // Handles Freedom, Sapphire, CapOne PDFs where headers may be doubled chars
 // Transaction format: "MM/DD MERCHANT NAME ... AMOUNT"
 // Negative = payment/credit, positive = purchase
+// IMPORTANT: For statements that cross a year boundary (e.g. Dec 10, 2025 - Jan 9, 2026),
+// Dec rows must be stamped 2025 and Jan rows 2026. Old code grabbed a single year
+// and applied it to all transactions, putting Dec in the wrong year.
 function parseChaseCardPdf(text, cardKey) {
   const txns = [];
   
-  // Extract year - look for Statement Date or year in footer
-  let year = new Date().getFullYear().toString();
+  // Detect billing cycle. Chase formats:
+  //   "Opening/Closing Date 12/10/25 - 01/09/26"
+  //   "Statement Date: 01/09/26"
+  let cycleFirstMonth = null, cycleFirstYear = null, cycleSecondYear = null;
+  const cycleM = text.match(/Opening\/Closing\s*Date\s+(\d{2})\/(\d{2})\/(\d{2})\s*[-–]\s*(\d{2})\/(\d{2})\/(\d{2})/i);
+  if (cycleM) {
+    cycleFirstMonth = parseInt(cycleM[1], 10);
+    cycleFirstYear = '20' + cycleM[3];
+    cycleSecondYear = '20' + cycleM[6];
+  }
+  // Fallback year
+  let fallbackYear = new Date().getFullYear().toString();
   const yearM = text.match(/Statement Date:\s*(\d{2})\/(\d{2})\/(\d{2})/);
-  if (yearM) year = '20' + yearM[3];
+  if (yearM) fallbackYear = '20' + yearM[3];
   else {
     const yearM2 = text.match(/Opening\/Closing Date\s+\d{2}\/\d{2}\/(\d{2})/);
-    if (yearM2) year = '20' + yearM2[1];
+    if (yearM2) fallbackYear = '20' + yearM2[1];
     else {
       const yearM3 = text.match(/\b(20\d{2})\b/);
-      if (yearM3) year = yearM3[1];
+      if (yearM3) fallbackYear = yearM3[1];
     }
   }
   
@@ -1958,6 +2508,11 @@ function parseChaseCardPdf(text, cardKey) {
     // Negative = credit/payment, positive = purchase charge
     if (amount < 0) continue; // skip credits/payments
     
+    // Pick year matching this transaction's month
+    let year = fallbackYear;
+    if (cycleFirstMonth !== null) {
+      year = parseInt(month, 10) === cycleFirstMonth ? cycleFirstYear : cycleSecondYear;
+    }
     const dateStr = month + '/' + day + '/' + year;
     txns.push({
       id: Math.random().toString(36).slice(2),
@@ -2063,6 +2618,24 @@ async function processQueue(){
       if((item.cardKey==='sccuAutoLoan'||item.invType==='sccuAutoLoan')&&item.csvText){
         allTxns=parseSCCUAutoLoanCSV(item.csvText).map(t=>({...t,cardKey:'sccuAutoLoan',cardLabel:'SCCU Auto Loan'}));
       }
+      // ── Aidvantage student loan history CSV (HTML-prefixed) ──────────────
+      else if(item.cardKey==='aidvantage_csv'&&item.csvText){
+        const summary = parseAidvantageCSV(item.csvText);
+        if(summary){
+          // Don't add to spending — the bank-side payment is already categorized as Debt Payments.
+          // Just show informational toast + log to state for reference.
+          if(!STATE.loanPayments) STATE.loanPayments = {};
+          STATE.loanPayments.aidvantage = summary;
+          item.txnCount = summary.payments.length;
+          item.status = 'done';
+          item._committed = 0;
+          saveState(); renderUploadQueue();
+          showToast(`Aidvantage: ${summary.payments.length} payments, $${summary.totalPaid.toFixed(2)} total ($${summary.totalPrincipal.toFixed(2)} principal · $${summary.totalInterest.toFixed(2)} interest)`,'success');
+          continue;
+        }else{
+          item.status='error';renderUploadQueue();continue;
+        }
+      }
       // ── Simplifi / Keybank CSV ────────────────────────────────────────────
       else if(item.isSimplifi&&item.csvText){
         allTxns=parseSimplifiCSV(item.csvText).map(t=>({...t,cardKey:'sccuChecking',cardLabel:'SCCU Checking'}));
@@ -2083,12 +2656,56 @@ async function processQueue(){
         }
       }
       // ── Balance-only PDFs (Ally) ──────────────────────────────────────────
-      else if(item.balanceOnly&&item.isPdf){
-        if(item.cardKey==='ally'){
-          const bal=extractAllyBalance(item.pdfText);
-          if(bal!==null){STATE.accounts.emergFund=bal;const el=document.getElementById('a-emergFund');if(el)el.value=bal;saveState();updateDashboard();renderEmergencyGauge();showToast(`Emergency fund updated: $${bal.toFixed(2)}`,'success');}
-        }
+      else if(item.balanceOnly&&item.isPdf&&item.cardKey==='ally'){
+        const bal=extractAllyBalance(item.pdfText);
+        if(bal!==null){STATE.accounts.emergFund=bal;const el=document.getElementById('a-emergFund');if(el)el.value=bal;saveState();updateDashboard();renderEmergencyGauge();showToast(`Emergency fund updated: $${bal.toFixed(2)}`,'success');}
         item.txnCount=0;item.status='done';renderUploadQueue();continue;
+      }
+      // ── HealthEquity HSA monthly statement PDF ────────────────────────────
+      // Two balances (cash + invested) + transactions. Updates STATE.accounts.hsa
+      // to the combined total. Aggregates YTD contributions across multiple
+      // statements imported. Card swipes are NOT added to bank spending (they're
+      // HSA-funded medical expenses, separate cash-flow channel) but are surfaced
+      // in the summary so the user can see them.
+      else if(item.isPdf&&item.cardKey==='hsa_he'){
+        const parsed=parseHealthEquityHsaPdf(item.pdfText||'');
+        if(parsed){
+          if(!STATE.balanceLog)STATE.balanceLog={};
+          if(!STATE.balanceLog.hsaStatements)STATE.balanceLog.hsaStatements={};
+          // Store this statement period for YTD aggregation
+          STATE.balanceLog.hsaStatements[parsed.periodEnd]={
+            periodStart:parsed.periodStart, periodEnd:parsed.periodEnd,
+            cashEnding:parsed.cashEnding, investedClosing:parsed.investedClosing, totalEnding:parsed.totalEnding,
+            employeeContrib:parsed.employeeContrib, employerContrib:parsed.employerContrib,
+            cardSpending:parsed.cardSpending, cardSpendingTotal:parsed.cardSpendingTotal,
+            holdings:parsed.holdings, periodReturn:parsed.periodReturn, ytdReturn:parsed.ytdReturn,
+          };
+          // Most-recent-wins for the balance display
+          const prev=STATE.balanceLog.hsa;
+          if(!prev||(parsed.statementDate&&parsed.statementDate>prev.date)){
+            STATE.accounts.hsa=parsed.totalEnding;
+            STATE.balanceLog.hsa={date:parsed.statementDate, cash:parsed.cashEnding, invested:parsed.investedClosing, total:parsed.totalEnding, holdings:parsed.holdings};
+            const elH=document.getElementById('a-hsa'); if(elH)elH.value=parsed.totalEnding.toFixed(2);
+          }
+          // Aggregate YTD contributions across all imported statements (current year only)
+          const curYear=new Date().getFullYear();
+          let ytdEmp=0, ytdEmpr=0, ytdCard=0;
+          for(const k in STATE.balanceLog.hsaStatements){
+            const s=STATE.balanceLog.hsaStatements[k];
+            if(s.periodEnd && parseInt(s.periodEnd.slice(0,4))===curYear){
+              ytdEmp+=s.employeeContrib||0;
+              ytdEmpr+=s.employerContrib||0;
+              ytdCard+=s.cardSpendingTotal||0;
+            }
+          }
+          STATE.balanceLog.hsa.ytdEmployeeContrib=ytdEmp;
+          STATE.balanceLog.hsa.ytdEmployerContrib=ytdEmpr;
+          STATE.balanceLog.hsa.ytdCardSpending=ytdCard;
+
+          item._committed=0; item._review=0; item._deduped=0;
+          item._summary=`HSA: $${parsed.totalEnding.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} ($${parsed.cashEnding.toFixed(0)} cash + $${parsed.investedClosing.toFixed(0)} invested) · Period: Emp $${parsed.employeeContrib.toFixed(2)} + Match $${parsed.employerContrib.toFixed(2)}${parsed.cardSpendingTotal>0?` · Card swipes $${parsed.cardSpendingTotal.toFixed(2)}`:''}${parsed.periodReturn!==null?` · ${parsed.periodReturn}% return`:''}`;
+        }
+        allTxns=[]; // no spending txns to commit (HSA card swipes are NOT bank spending)
       }
       // ── Capital One 360 Savings PDF ───────────────────────────────────────
       else if(item.isPdf&&item.cardKey==='co360'&&item.isBank){
@@ -2101,6 +2718,27 @@ async function processQueue(){
       else if(item.isPdf&&item.cardKey==='capitalOne'){
         const txns=parseCapOneVenturePdf(item.pdfText||'');
         allTxns=txns.map(t=>({...t,cardKey:'capitalOne',cardLabel:'Capital One Venture X'}));
+      }
+      // ── Fidelity NetBenefits 403b PDF (balance + contributions snapshot) ──
+      else if(item.isPdf&&item.cardKey==='fidelity_403b_nb'){
+        const parsed=parseFidelityNetBenefitsPdf(item.pdfText||'');
+        if(parsed){
+          // Most-recent-wins: same pattern as Fidelity Statement CSVs
+          if(!STATE.balanceLog)STATE.balanceLog={};
+          const prev=STATE.balanceLog.chase403b;
+          if(!prev||(parsed.statementDate&&parsed.statementDate>prev.date)){
+            STATE.accounts.chase403b=parsed.endingBalance;
+            STATE.accounts.chase403bContrib=parsed.totalContrib;
+            STATE.balanceLog.chase403b={date:parsed.statementDate,value:parsed.endingBalance,holdings:parsed.holdings,employeeContrib:parsed.employeeContrib,employerContrib:parsed.employerContrib};
+            // Reflect in any visible UI inputs
+            const elBal=document.getElementById('a-chase403b'); if(elBal)elBal.value=parsed.endingBalance.toFixed(2);
+            const elCon=document.getElementById('a-chase403bContrib'); if(elCon)elCon.value=parsed.totalContrib.toFixed(2);
+          }
+          // Mark item as done with informational summary in the queue UI
+          item._committed=0; item._review=0; item._deduped=0;
+          item._summary=`403b balance: $${parsed.endingBalance.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})} · Employee $${parsed.employeeContrib.toFixed(2)} + Match $${parsed.employerContrib.toFixed(2)} = $${parsed.totalContrib.toFixed(2)} YTD${parsed.personalReturn!==null?` · ${parsed.personalReturn}% return`:''}`;
+        }
+        allTxns=[]; // no spending txns to commit
       }
       // ── Chase / SCCU CC PDFs ──────────────────────────────────────────────
       else if(item.isPdf&&item.cardKey&&['chaseFreedom','sapphire','sccu'].includes(item.cardKey)){
@@ -2119,17 +2757,36 @@ async function processQueue(){
     const existingHashes=new Set(STATE.spendingHashes);
     let autoCommitted=0,needsReview=0;
     const INCOME_PATS=[
-      /payroll/i,/direct[-\s]*pay/i,/direct[-\s]*dep/i,
-      /orlando\s*health/i,/leavitt\s*medical/i,/salary|compensation/i,
+      /payroll/i,/direct[-\s]*pay/i,/direct[-\s]*dep/i,/dir\s*dep/i,
+      /orlando\s*health/i,
+      // Broader Leavitt match — handles "LEAVITT MEDICAL", "LEAVITT MED CTR",
+      // "LEAVITT PHYS", "LEAVITT PMG", "LEAVITT PAYROLL", etc.
+      /leavitt/i,
+      /salary|compensation|wages/i,
       /usf\s*(federal\s*credit\s*union|fcu)/i,
       /preauthorized\s*(dep|credit|transfer)/i,/victoria\s*dukhara/i,
       /ach\s*credit/i,/employer\s*direct/i,/net\s*pay/i,
       /deposit\s+from\s+orlando\s*health/i,/deposit\s+from\s+usf\s*federal/i,
+      /deposit\s+from\s+leavitt/i,
       /deposit\s+from.*payroll/i,/preauthorized\s+deposit\s+from\s+usf/i,
+      // Generic medical / physician payer patterns
+      /physician.*pay/i,/medical.*pay.*roll/i,/hospital.*payroll/i,
     ];
     const SKIP_CREDIT_PATS=[
-      /^(transfer\s*(to|from)|online\s*xfr|a2a\s*xfer)/i,
-      /interest\s*(payment|paid)/i,/^moneyline\s+\d/i,
+      // Drop ^ anchor — real descriptions like "INCOMING TRANSFER FROM X" or
+      // "ACH,SCCU EXTRNAL TFR A2A XFERS CHASE H CHAVEZ" have the keyword mid-string.
+      // Also allow A2A XFERS (plural) which was missed previously.
+      /\b(transfer\s*(to|from)|online\s*xfr|a2a\s*xfers?|incoming\s*transfer|outgoing\s*transfer)\b/i,
+      /\bsccu\s*extrnal\s*tfr/i,
+      /\binterest\s*(payment|paid)\b/i,
+      /\bmoneyline\s+\d/i,
+      /\b(zelle|venmo|cash\s*app|paypal)\s*(transfer|received|payment|cashout|dep|w\/?d)\b/i,
+      /\binternal\s*transfer|\binternet\s*trf\b/i,
+      /\baccount\s*to\s*account\b/i,
+      // ACH transfers from spouse, between own accounts — not income
+      /\bach[,\s]*victoria/i,
+      /\bach[,\s]*sccu/i,
+      /victoria\s*dukhara.*extransfer/i,
     ];
     const isIncomeDesc=d=>INCOME_PATS.some(r=>r.test(d));
     for(const txn of allTxns){
@@ -2154,9 +2811,20 @@ async function processQueue(){
         if(isIncomeDesc(desc)){
           if(!STATE.income)STATE.income={};
           if(!STATE.income[monthKey])STATE.income[monthKey]={total:0,items:[]};
-          const ih=`income|${txn.date}|${desc.slice(0,20)}|${txn.amount}`;
-          if(!existingHashes.has(ih)){
+          // ── Smart income dedup ──────────────────────────────────────────
+          // Same paycheck can appear with different wordings across banks:
+          //   "ORLANDO HEALTH PAYROLL"
+          //   "DEPOSIT FROM ORLANDO HEALTH"
+          //   "ACH CREDIT ORLANDO HEALTH PAYROLL"
+          // Extract the EMPLOYER keyword + amount + date to make these collapse.
+          const employerKeywords = ['orlando','leavitt','usf','victoria','chase','dukhara'];
+          const descLow = desc.toLowerCase();
+          const employer = employerKeywords.find(k=>descLow.includes(k)) || descLow.replace(/[^a-z]/g,'').slice(0,15);
+          const amt = parseFloat(txn.amount).toFixed(2);
+          const ih = `income|${txn.date}|${employer}|${amt}`;
+          if(!existingHashes.has(ih) && !STATE.spendingHashes.includes(ih)){
             existingHashes.add(ih);
+            STATE.spendingHashes.push(ih);
             STATE.income[monthKey].total+=txn.amount;
             STATE.income[monthKey].items.push({date:txn.date,amount:txn.amount,desc,source:txn.cardLabel||item.cardKey});
           }
@@ -2217,15 +2885,52 @@ function renderReviewQueue(){
   const pending=STATE.reviewQueue.filter(t=>!t.reviewed);
   if(!pending.length){container.innerHTML='';commitWrap.style.display='none';empty.style.display='flex';return;}
   empty.style.display='none';commitWrap.style.display='flex';
-  container.innerHTML=pending.slice(0,30).map(txn=>{
+  // Render ALL pending items (previously capped at 30 — which hid items #31+ from manual editing)
+  // For huge queues (200+), show a perf warning at the top.
+  const perfWarn = pending.length>200 ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--warn);background:rgba(245,158,11,0.1);border-radius:8px;margin-bottom:8px">⚠ ${pending.length} items in queue. Use "Accept All" if categories look correct, or scroll to edit individually.</div>` : '';
+  container.innerHTML = perfWarn + pending.map(txn=>{
     const idx=STATE.reviewQueue.indexOf(txn);
     const cc=txn.confidence>=85?'var(--accent)':txn.confidence>=70?'var(--warn)':'var(--danger)';
     const chips=CATEGORIES.map(c=>`<span class="chip ${c===txn.category?'active':''}" onclick="setCategory(${idx},'${c}')">${c}</span>`).join('');
     return`<div class="review-card"><div class="confidence-bar"><div class="confidence-fill" style="width:${txn.confidence}%;background:${cc}"></div></div><div class="review-top"><div class="review-desc">${txn.description}</div><div class="review-amount ${txn.isCredit?'credit':''}">${txn.isCredit?'+':'−'}$${txn.amount.toFixed(2)}</div></div><div class="review-meta"><span class="review-tag">${txn.date}</span><span class="review-tag">${txn.cardLabel}</span><span class="review-tag">${txn.confidence}% · ${txn.source}</span></div><div class="review-chips">${chips}</div><div class="review-actions"><button class="review-action accept" onclick="acceptTxn(${idx})">✓ Accept</button><button class="review-action skip" onclick="skipTxn(${idx})">Skip</button></div></div>`;
-  }).join('')+(pending.length>30?`<div style="text-align:center;padding:10px;font-size:11px;color:var(--muted)">${pending.length-30} more</div>`:'');
+  }).join('');
 }
-function setCategory(idx,category){STATE.reviewQueue[idx].category=category;STATE.reviewQueue[idx].source='manual';renderReviewQueue();}
-function acceptTxn(idx){STATE.reviewQueue[idx].reviewed=true;saveState();updateReviewBadge();renderReviewQueue();}
+function setCategory(idx,category){
+  const txn = STATE.reviewQueue[idx];
+  if(!txn) return;
+  const wasAi = txn.source === 'ai';
+  txn.category = category;
+  txn.source = 'manual';
+  txn.confidence = 100; // Manual = highest confidence
+
+  // ── Learning: extract a memorable keyword from the description and offer
+  // to save it as a custom rule. Next time we see this merchant, it auto-routes.
+  // Only prompt for corrections that overrode AI (signal it was wrong).
+  if(wasAi){
+    const desc = (txn.description||'').replace(/[#*0-9]+/g,'').trim();
+    // Take the first 1-3 meaningful words as the rule pattern
+    const words = desc.split(/\s+/).filter(w=>w.length>=3).slice(0,3);
+    if(words.length){
+      const pattern = words.join(' ');
+      // Don't prompt if a rule with this pattern already exists
+      const exists = STATE.customRules.some(r=>r.pattern.toLowerCase()===pattern.toLowerCase());
+      if(!exists){
+        // Use a non-blocking, dismissible suggestion bar at top of review card area
+        setTimeout(()=>{
+          if(confirm(`Auto-categorize "${pattern}" as ${category} from now on?\n\nNext time any transaction containing "${pattern}" is imported, it'll be set to ${category} automatically.`)){
+            STATE.customRules.unshift({pattern, category});
+            saveState();
+            showToast(`✓ Rule saved: ${pattern} → ${category}`,'success');
+          }
+        },50);
+      }
+    }
+  }
+
+  saveState();
+  renderReviewQueue();
+}
+function acceptTxn(idx){const t=STATE.reviewQueue[idx];if(t){t.reviewed=true;saveState();updateReviewBadge();renderReviewQueue();}}
 function skipTxn(idx){STATE.reviewQueue.splice(idx,1);saveState();updateReviewBadge();renderReviewQueue();}
 function commitAll(){
   const toCommit=STATE.reviewQueue.filter(t=>t.reviewed);
@@ -2381,11 +3086,17 @@ async function aiCategorizeAll(){
       const results = await categorizeBatch(batch);
       for(const r of results){
         const txn = STATE.reviewQueue.find(t=>t.id===r.id);
-        if(txn && CATEGORIES.includes(r.category)){
-          txn.category = r.category;
-          txn.confidence = 88;
-          txn.source = 'ai';
-          updated++;
+        if(txn){
+          // Fuzzy match — AI may return "Gas/Fuel" without spaces, normalize to canonical
+          const canonical = CATEGORIES.find(c=>
+            c.toLowerCase().replace(/\s+/g,'') === (r.category||'').toLowerCase().replace(/\s+/g,'')
+          );
+          if(canonical){
+            txn.category = canonical;
+            txn.confidence = 88;
+            txn.source = 'ai';
+            updated++;
+          }
         }
       }
     }catch(err){
@@ -2397,8 +3108,45 @@ async function aiCategorizeAll(){
     }
   }
 
-  saveState(); renderReviewQueue();
-  if(updated && !failed) showToast(`✓ AI categorized ${updated}`,'success');
+  // ── AUTO-COMMIT items whose new confidence meets the threshold ──────────────
+  // Without this, AI rescues sit in review forever even though they meet the
+  // auto-commit bar. This is the actual "minimal work" payoff.
+  const threshold = STATE.settings.confidenceThreshold || 80;
+  let autoCommitted = 0;
+  const stillInReview = [];
+  for(const txn of STATE.reviewQueue){
+    if(txn.reviewed){stillInReview.push(txn); continue;}
+    if(txn.confidence >= threshold && txn.source === 'ai'){
+      // Commit directly to spending
+      if(txn._spendHash && !STATE.spendingHashes.includes(txn._spendHash)){
+        STATE.spendingHashes.push(txn._spendHash);
+      }
+      if(!STATE.spending[txn.monthKey]) STATE.spending[txn.monthKey] = {};
+      if(!STATE.spending[txn.monthKey][txn.cardKey]) STATE.spending[txn.monthKey][txn.cardKey] = {};
+      const cm = STATE.spending[txn.monthKey][txn.cardKey];
+      const cat = txn.category || 'Other';
+      if(!cm[cat]) cm[cat] = 0;
+      if(!cm._txns) cm._txns = [];
+      cm[cat] += txn.amount;
+      cm._txns.push({date:txn.date, desc:txn.description, amount:txn.amount, category:cat, cardKey:txn.cardKey, cardLabel:txn.cardLabel});
+      autoCommitted++;
+    }else{
+      stillInReview.push(txn);
+    }
+  }
+  STATE.reviewQueue = stillInReview;
+
+  saveState(); renderReviewQueue(); updateReviewBadge(); renderSpendingTab(); updateDashboard(); renderAllCharts();
+  if(updated && !failed){
+    const reviewLeft = STATE.reviewQueue.filter(t=>!t.reviewed).length;
+    if(autoCommitted && !reviewLeft){
+      showToast(`✓ AI auto-committed ${autoCommitted} · 0 left to review`,'success');
+    }else if(autoCommitted){
+      showToast(`✓ AI auto-committed ${autoCommitted} · ${reviewLeft} need review`,'success');
+    }else{
+      showToast(`✓ AI categorized ${updated}`,'success');
+    }
+  }
   else if(updated && failed) showToast(`AI: ${updated} done, ${failed} failed (see console)`,'success');
   else showToast(`AI failed: check console (likely API key or rate limit)`,'error');
 }
@@ -2842,6 +3590,14 @@ function confirmClearSpending(){
   STATE.spending={};STATE.spendingHashes=[];STATE.reviewQueue=[];STATE.income={};
   saveState();renderSpendingTab();renderReviewQueue();updateReviewBadge();renderAllCharts();
   showToast('Spending data cleared — ready to reimport','success');
+}
+function confirmClearIncome(){
+  if(!confirm('Clear all income deposits only? Spending data and account balances are kept. Reimport your bank statements to repopulate income.'))return;
+  STATE.income={};
+  // Strip only income-prefixed hashes from the dedup list
+  STATE.spendingHashes=(STATE.spendingHashes||[]).filter(h=>!h.startsWith('income|'));
+  saveState();renderSpendingTab();updateDashboard();renderAllCharts();
+  showToast('Income cleared — reimport bank statements to repopulate','success');
 }
 function confirmClearAll(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('wci_state_v6');STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{'8629':'chaseFreedom','9323':'sapphire'},monthlyLog:{},settings:{apiKey:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};const now=new Date();STATE.ui.spendingMonth=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;updateDashboard();renderSpendingTab();renderReviewQueue();updateReviewBadge();renderAllCharts();showToast('All data cleared','success');}
 
