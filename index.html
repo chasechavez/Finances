@@ -354,6 +354,26 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
         <button class="month-nav-btn" onclick="changeMonth(1)">›</button>
       </div>
 
+      <!-- Manual Add Transaction -->
+      <div style="background:var(--card);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none" onclick="toggleCollapse('manual-add-form','manual-add-chev')">
+          <span style="font-size:12px;font-weight:600">+ Add Transaction Manually</span>
+          <span id="manual-add-chev" style="font-size:11px;color:var(--dim);transition:transform 0.2s;display:inline-block;transform:rotate(-90deg)">▼</span>
+        </div>
+        <div id="manual-add-form" style="display:none;padding:12px 14px;border-top:1px solid var(--border)">
+          <div class="input-row">
+            <div class="input-group"><div class="input-label">Date</div><input class="input-field" type="date" id="man-date"></div>
+            <div class="input-group"><div class="input-label">Amount ($)</div><input class="input-field num" type="number" step="0.01" id="man-amount" placeholder="0.00" min="0.01"></div>
+          </div>
+          <div class="input-group"><div class="input-label">Description</div><input class="input-field" type="text" id="man-desc" placeholder="Merchant or description"></div>
+          <div class="input-row">
+            <div class="input-group"><div class="input-label">Category</div><select class="input-field" id="man-cat"></select></div>
+            <div class="input-group"><div class="input-label">Card / Account</div><select class="input-field" id="man-card"></select></div>
+          </div>
+          <button class="btn btn-primary btn-full" onclick="addManualTransaction()" style="margin-top:4px">+ Add Transaction</button>
+        </div>
+      </div>
+
       <!-- Summary Stats -->
       <div class="spending-stat-row">
         <div class="spending-stat"><div class="spending-stat-val negative" id="sp-total">$0</div><div class="spending-stat-lbl">Consumer Spending</div></div>
@@ -376,6 +396,22 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       </div>
 
       <div style="display:none" id="sp-cats"></div>
+
+      <!-- Category Breakdown + Budgets -->
+      <div class="section-label">Category Breakdown &amp; Budgets</div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border)">
+          <span style="font-size:12px;font-weight:600">By Category</span>
+          <span style="font-size:9px;color:var(--dim)">Tap "Set" to add monthly budget</span>
+        </div>
+        <div id="sp-budget-cats"></div>
+      </div>
+
+      <!-- Month-over-Month Delta -->
+      <div class="section-label">Month-over-Month</div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <div id="sp-mom-delta"></div>
+      </div>
 
       <span id="sp-income-count" style="display:none"></span>
 
@@ -2143,6 +2179,7 @@ function loadState(){
   STATE.reviewQueue=STATE.reviewQueue||[];
   STATE.customRules=STATE.customRules||[];
   STATE.spendingHashes=STATE.spendingHashes||[];
+  STATE.budgets=STATE.budgets||{};
   STATE.settings=STATE.settings||{};
   if(STATE.settings.confidenceThreshold==null)STATE.settings.confidenceThreshold=80;
   if(!STATE.accounts||Object.keys(STATE.accounts).length===0)STATE.accounts={...DEFAULT_ACCOUNTS};
@@ -3317,6 +3354,8 @@ function renderSpendingTab(){
       </div>
     </div>`).join(''):'';
   renderTxnList(STATE._allTxns);
+  renderBudgetCats(catTotals);
+  renderMomDelta(key);
   // Render spending charts inline in spending tab
   renderSpendingCharts();
 }
@@ -4399,6 +4438,154 @@ async function handleTurboTenantFile(file) {
   }
 }
 
+// ── Manual Transaction Entry ──────────────────────────────────────────────────
+function initManualForm(){
+  const catSel=document.getElementById('man-cat');
+  if(catSel&&!catSel.options.length){
+    CATEGORIES.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;catSel.add(o);});
+  }
+  const cardSel=document.getElementById('man-card');
+  if(cardSel&&!cardSel.options.length){
+    Object.entries(CARD_PROFILES).forEach(([k,p])=>{const o=document.createElement('option');o.value=k;o.textContent=p.label+' ('+p.owner+')';cardSel.add(o);});
+    const o=document.createElement('option');o.value='manual';o.textContent='Manual / Cash';cardSel.add(o);
+  }
+  const dateEl=document.getElementById('man-date');
+  if(dateEl&&!dateEl.value){const now=new Date();dateEl.value=now.toISOString().split('T')[0];}
+}
+
+function addManualTransaction(){
+  const dateISO=(document.getElementById('man-date')?.value||'').trim();
+  const amount=parseFloat(document.getElementById('man-amount')?.value||'0');
+  const desc=(document.getElementById('man-desc')?.value||'').trim();
+  const category=document.getElementById('man-cat')?.value||'';
+  const cardKey=document.getElementById('man-card')?.value||'manual';
+  if(!dateISO||!amount||amount<=0||!desc){showToast('Fill in date, amount, and description','error');return;}
+  if(!category){showToast('Select a category','error');return;}
+  const[yr,mo,dy]=dateISO.split('-');
+  const dateStr=`${mo}/${dy}/${yr}`;
+  const monthKey=`${yr}-${mo}`;
+  const cardProfile=CARD_PROFILES[cardKey];
+  const cardLabel=cardProfile?cardProfile.label:'Manual';
+  const hash=`manual|${dateStr}|${desc.slice(0,20)}|${amount.toFixed(2)}`;
+  if(STATE.spendingHashes.includes(hash)){showToast('Duplicate transaction skipped','error');return;}
+  STATE.spendingHashes.push(hash);
+  if(!STATE.spending[monthKey])STATE.spending[monthKey]={};
+  if(!STATE.spending[monthKey][cardKey])STATE.spending[monthKey][cardKey]={};
+  const cm=STATE.spending[monthKey][cardKey];
+  if(!cm[category])cm[category]=0;
+  if(!cm._txns)cm._txns=[];
+  cm[category]+=amount;
+  cm._txns.push({date:dateStr,desc,amount,category,cardKey,cardLabel,manual:true});
+  STATE.ui.spendingMonth=monthKey;
+  saveState();
+  renderSpendingTab();
+  document.getElementById('man-amount').value='';
+  document.getElementById('man-desc').value='';
+  showToast(`Added: ${desc} — $${amount.toFixed(2)} → ${category}`,'success');
+}
+
+// ── Budget System ─────────────────────────────────────────────────────────────
+function saveBudget(category,value){
+  if(!STATE.budgets)STATE.budgets={};
+  const v=parseFloat(value);
+  if(v>0)STATE.budgets[category]=v;
+  else delete STATE.budgets[category];
+  saveState();
+}
+
+function promptBudgetEdit(category,current){
+  const val=prompt(`Monthly budget for "${category}" ($):`,current>0?current.toString():'');
+  if(val===null)return;
+  saveBudget(category,val);
+  renderSpendingTab();
+}
+
+function renderBudgetCats(catTotals){
+  const el=document.getElementById('sp-budget-cats');
+  if(!el)return;
+  const NON_SPEND=new Set(['Debt Payments','Income','Transfer','CC Payment']);
+  const entries=Object.entries(catTotals).filter(([cat,v])=>v>0&&!NON_SPEND.has(cat)).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length){el.innerHTML='<div class="empty-state" style="padding:16px"><div class="empty-title">No spending data for this month</div></div>';return;}
+  const budgets=STATE.budgets||{};
+  el.innerHTML=entries.map(([cat,amt])=>{
+    const budget=budgets[cat]||0;
+    const pct=budget>0?Math.min(amt/budget*100,120):0;
+    const over=budget>0&&amt>budget;
+    const barColor=over?'var(--danger)':pct>80?'var(--warn)':(CAT_COLORS[cat]||'var(--accent)');
+    const budgetDisplay=budget>0?`$${Math.round(amt).toLocaleString()} / $${Math.round(budget).toLocaleString()}`:`$${Math.round(amt).toLocaleString()}`;
+    const overAmt=over?` <span style="font-size:9px;color:var(--danger);font-weight:700">+$${Math.round(amt-budget)} OVER</span>`:'';
+    const catSafe=cat.replace(/'/g,"\\'");
+    return`<div style="padding:8px 12px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${budget>0?'5':'0'}px">
+        <div style="width:7px;height:7px;border-radius:50%;background:${CAT_COLORS[cat]||'#475569'};flex-shrink:0"></div>
+        <span style="font-size:11px;flex:1;font-weight:500">${cat}</span>
+        <span style="font-size:11px;font-family:'DM Mono',monospace;color:${over?'var(--danger)':'var(--text)'}">${budgetDisplay}</span>${overAmt}
+        <button onclick="promptBudgetEdit('${catSafe}',${budget})" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--dim);cursor:pointer;font-size:9px;padding:2px 6px;flex-shrink:0;font-family:'DM Sans',sans-serif">${budget>0?'Edit':'Set $'}</button>
+      </div>
+      ${budget>0?`<div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden"><div style="height:100%;width:${Math.min(pct,100).toFixed(1)}%;background:${barColor};border-radius:2px;transition:width 0.3s"></div></div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ── Month-over-Month Delta Table ──────────────────────────────────────────────
+function renderMomDelta(currentKey){
+  const el=document.getElementById('sp-mom-delta');
+  if(!el)return;
+  const[y,m]=currentKey.split('-').map(Number);
+  const prevDate=new Date(y,m-2,1);
+  const prevKey=`${prevDate.getFullYear()}-${String(prevDate.getMonth()+1).padStart(2,'0')}`;
+  const NON_SPEND=new Set(['Debt Payments','Income','Transfer','CC Payment']);
+  function getCatTotals(mk){
+    const t={};
+    for(const cats of Object.values(STATE.spending[mk]||{}))
+      for(const[cat,amt]of Object.entries(cats)){if(cat==='_txns'||NON_SPEND.has(cat)||amt<=0)continue;t[cat]=(t[cat]||0)+amt;}
+    return t;
+  }
+  const cur=getCatTotals(currentKey);
+  const prev=getCatTotals(prevKey);
+  const hasCur=Object.keys(cur).length>0;
+  const hasPrev=Object.keys(prev).length>0;
+  if(!hasCur||!hasPrev){
+    const prevLabel=`${MONTHS_FULL[prevDate.getMonth()]} ${prevDate.getFullYear()}`;
+    el.innerHTML=`<div class="empty-state" style="padding:16px"><div class="empty-title">No ${hasCur?prevLabel:'current month'} data</div><div class="empty-sub">Import both months to compare</div></div>`;
+    return;
+  }
+  const allCats=new Set([...Object.keys(cur),...Object.keys(prev)]);
+  const rows=[...allCats].filter(c=>cur[c]>0||prev[c]>0).map(c=>({cat:c,cur:cur[c]||0,prev:prev[c]||0})).sort((a,b)=>b.cur-a.cur);
+  const curTotal=rows.reduce((s,r)=>s+r.cur,0);
+  const prevTotal=rows.reduce((s,r)=>s+r.prev,0);
+  const totalDelta=curTotal-prevTotal;
+  const totalDeltaPct=prevTotal>0?(totalDelta/prevTotal*100):0;
+  const curLabel=MONTHS[m-1];
+  const prevLabel=MONTHS[prevDate.getMonth()];
+  el.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 68px 68px 80px;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;padding:6px 12px;border-bottom:1px solid var(--border)">
+      <span>Category</span><span style="text-align:right">${curLabel}</span><span style="text-align:right">${prevLabel}</span><span style="text-align:right">Delta</span>
+    </div>
+    ${rows.map(r=>{
+      const delta=r.cur-r.prev;
+      const deltaPct=r.prev>0?delta/r.prev*100:(r.cur>0?100:0);
+      const dColor=delta>0?'var(--danger)':delta<0?'var(--accent)':'var(--muted)';
+      const sign=delta>0?'+':'';
+      const pctStr=Math.abs(deltaPct)>1?` (${sign}${Math.round(deltaPct)}%)`:'';
+      return`<div style="display:grid;grid-template-columns:1fr 68px 68px 80px;padding:5px 12px;border-bottom:1px solid var(--border);font-size:10px;align-items:center">
+        <div style="display:flex;align-items:center;gap:5px;min-width:0">
+          <div style="width:5px;height:5px;border-radius:50%;background:${CAT_COLORS[r.cat]||'#475569'};flex-shrink:0"></div>
+          <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.cat}</span>
+        </div>
+        <span style="text-align:right;font-family:'DM Mono',monospace;color:${r.cur>0?'var(--text)':'var(--dim)'}">$${Math.round(r.cur).toLocaleString()}</span>
+        <span style="text-align:right;font-family:'DM Mono',monospace;color:var(--muted)">$${Math.round(r.prev).toLocaleString()}</span>
+        <span style="text-align:right;font-family:'DM Mono',monospace;color:${dColor};font-size:9px">${sign}$${Math.abs(Math.round(delta)).toLocaleString()}${pctStr}</span>
+      </div>`;
+    }).join('')}
+    <div style="display:grid;grid-template-columns:1fr 68px 68px 80px;padding:6px 12px;font-size:10px;font-weight:600;background:var(--elevated)">
+      <span>Total</span>
+      <span style="text-align:right;font-family:'DM Mono',monospace">$${Math.round(curTotal).toLocaleString()}</span>
+      <span style="text-align:right;font-family:'DM Mono',monospace;color:var(--muted)">$${Math.round(prevTotal).toLocaleString()}</span>
+      <span style="text-align:right;font-family:'DM Mono',monospace;color:${totalDelta>0?'var(--danger)':'var(--accent)'};font-size:9px">${totalDelta>=0?'+':''}$${Math.abs(Math.round(totalDelta)).toLocaleString()} (${totalDelta>=0?'+':''}${Math.round(totalDeltaPct)}%)</span>
+    </div>`;
+}
+
 // Init
 loadState();
 loadAccounts();
@@ -4411,6 +4598,7 @@ renderLogPills();
 updateDashboard();
 updateReviewBadge();
 populateLast4CardSelect();
+initManualForm();
 if(STATE.settings.apiKey)document.getElementById('apikey-display').textContent=STATE.settings.apiKey.slice(0,12)+'...'+(STATE.settings.proxyUrl?' · proxied':' · NO PROXY');
 if(STATE.settings.confidenceThreshold)document.getElementById('conf-threshold').value=STATE.settings.confidenceThreshold;
 document.getElementById('header-sub').textContent=new Date().toLocaleDateString('en-US',{month:'long',year:'numeric'})+' · Live Like a Resident';
