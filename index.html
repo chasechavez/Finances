@@ -3963,10 +3963,12 @@ function renderIncomeTab(){
   let chaseTotal=0,vicTotal=0;
   for(const it of items){
     const d=(it.desc||'').toLowerCase();
-    if(/orlando\s*health|leavitt\s*medical/i.test(d)||['keybankChecking','sccuChecking'].includes(it.source)){
-      chaseTotal+=it.amount;
-    } else if(/usf\s*federal|usf\s*fcu|victoria|preauthorized/i.test(d)||it.source==='co360'){
+    // Victoria: Leavitt (residency program), USF, CO360 source
+    // Chase: Orlando Health
+    if(/leavitt/i.test(d)||/usf\s*(health|med|federal|fcu)|usf\b/i.test(d)||/resident.*stipend|residency.*pay|gme\s*pay/i.test(d)||(it.source||'').toLowerCase().includes('co360')||(it.source||'').toLowerCase().includes('capital one 360')){
       vicTotal+=it.amount;
+    } else if(/orlando\s*health/i.test(d)||(it.source||'').toLowerCase().includes('keybank')||(it.source||'').toLowerCase().includes('sccu')){
+      chaseTotal+=it.amount;
     } else {
       chaseTotal+=it.amount/2;vicTotal+=it.amount/2;
     }
