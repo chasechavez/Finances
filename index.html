@@ -326,6 +326,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div class="section-label" id="queue-label" style="display:none">Upload Queue</div>
       <div id="uploadQueue"></div>
       <div id="process-btn-wrap" style="display:none"><button class="btn btn-primary btn-full" onclick="processQueue()">⚡ Process All Files →</button></div>
+      <div id="import-history-wrap"></div>
     </div>
     <!-- REVIEW -->
     <div class="tab-panel" id="tab-review">
@@ -1432,6 +1433,25 @@ const BANK_RULES=[
   [/fid\s*bkg\s*svc|fidelity.*moneyline/i,null],
 ];
 
+const INCOME_PATS=[
+  /payroll/i,/direct[-\s]*pay/i,/direct[-\s]*dep/i,/dir\s*dep/i,
+  /orlando\s*health/i,
+  /leavitt/i,
+  /salary|compensation|wages/i,
+  /usf\s*(federal\s*credit\s*union|fcu)/i,
+  /preauthorized\s*(dep|credit|transfer)/i,/victoria\s*dukhara/i,
+  /ach\s*credit/i,/employer\s*direct/i,/net\s*pay/i,
+  /deposit\s+from\s+orlando\s*health/i,/deposit\s+from\s+usf\s*federal/i,
+  /deposit\s+from\s+leavitt/i,
+  /deposit\s+from.*payroll/i,/preauthorized\s+deposit\s+from\s+usf/i,
+  /physician.*pay/i,/medical.*pay.*roll/i,/hospital.*payroll/i,
+  /usf\s*health|usf\s*med/i,
+  /resident.*stipend|residency.*pay|fellowship.*pay|gme\s*pay/i,
+  /university.*florida.*pay/i,
+];
+function isIncomeDesc(d){return INCOME_PATS.some(r=>r.test(d));}
+function normDate(d){if(!d)return d;const m=d.match(/^(\d{1,2})\/(\d{1,2})\/(20\d{2})$/);if(m)return`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;return d;}
+
 function categorizeBank(txn){
   // Explicit rules win over generic skip patterns. This lets Arthur Raff (Housing)
   // beat the Zelle-W/D skip, Synchrony (Debt Payments) beat any payment-skip, etc.
@@ -2014,7 +2034,7 @@ function parseSCCUPdf(text){
   let section='none';
   const checkingTxns=[];
   const SKIP_DESC=[/beginning balance/i,/ending balance/i,/credit interest/i,/overdraft/i,/^total/i,/^account/i,/^days in/i,/^transaction\s*date/i,/^effective/i];
-  const INCOME_DESC=[/orlando\s*health.*payroll/i,/payroll/i,/venmo.*cashout/i,/direct.*dep/i];
+  // Uses module-level INCOME_PATS
   const SKIP_SPENDING=[/capital\s*one.*crcardpmt/i,/fid\s*bkg\s*svc.*moneyline/i,/transfer\s*to/i,/transfer\s*from/i,/venmo.*payment/i,/\*1741/i];
   for(let i=0;i<lines.length;i++){
     const line=lines[i].trim();
@@ -2035,7 +2055,7 @@ function parseSCCUPdf(text){
     if(amt===0)continue;
     if(amt>0){
       // Deposit - check if income
-      if(INCOME_DESC.some(r=>r.test(desc))){
+      if(isIncomeDesc(desc)){
         checkingTxns.push({id:Math.random().toString(36).slice(2),date,description:desc.trim(),amount:amt,isCredit:true,isBank:true,hintCategory:'',preCategory:null});
       }
       continue;
@@ -2093,7 +2113,7 @@ function parseSimplifiCSV(csvText){
 }
 
 // STATE
-let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{},monthlyLog:{},settings:{apiKey:'',proxyUrl:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};
+let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{},monthlyLog:{},importLog:[],settings:{apiKey:'',proxyUrl:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};
 
 const DEFAULT_ACCOUNTS={chaseGross:8207,chaseTakeHome:3553.80,chaseMatch:5,vicGross:3864.50,vicTakeHome:2000,vicMatch:2,fixedExp:3500,emergMonths:6,emergFund:1006,hsa:11883.87,hsaContrib:138.47,aidvantage:49014.99,aidvantageRate:7.1,edfinancial:136388,edfinancialRate:6.6,ecsi:52092,ecsiRate:5.0,ufcom:11060,ufcomRate:6.0,auto:12241,autoRate:6.74,furniture:2075,mortgage:250000,origMortgage:285000,mortgageRate:6.875,chase403bContrib:4100,vic401kContrib:5029,chaseRothContrib:7000,vicRothContrib:2400};
 
@@ -2783,22 +2803,6 @@ async function processQueue(){
     const threshold=STATE.settings.confidenceThreshold;
     const existingHashes=new Set(STATE.spendingHashes);
     let autoCommitted=0,needsReview=0;
-    const INCOME_PATS=[
-      /payroll/i,/direct[-\s]*pay/i,/direct[-\s]*dep/i,/dir\s*dep/i,
-      /orlando\s*health/i,
-      // Broader Leavitt match — handles "LEAVITT MEDICAL", "LEAVITT MED CTR",
-      // "LEAVITT PHYS", "LEAVITT PMG", "LEAVITT PAYROLL", etc.
-      /leavitt/i,
-      /salary|compensation|wages/i,
-      /usf\s*(federal\s*credit\s*union|fcu)/i,
-      /preauthorized\s*(dep|credit|transfer)/i,/victoria\s*dukhara/i,
-      /ach\s*credit/i,/employer\s*direct/i,/net\s*pay/i,
-      /deposit\s+from\s+orlando\s*health/i,/deposit\s+from\s+usf\s*federal/i,
-      /deposit\s+from\s+leavitt/i,
-      /deposit\s+from.*payroll/i,/preauthorized\s+deposit\s+from\s+usf/i,
-      // Generic medical / physician payer patterns
-      /physician.*pay/i,/medical.*pay.*roll/i,/hospital.*payroll/i,
-    ];
     const SKIP_CREDIT_PATS=[
       // Drop ^ anchor — real descriptions like "INCOMING TRANSFER FROM X" or
       // "ACH,SCCU EXTRNAL TFR A2A XFERS CHASE H CHAVEZ" have the keyword mid-string.
@@ -2815,7 +2819,6 @@ async function processQueue(){
       /\bach[,\s]*sccu/i,
       /victoria\s*dukhara.*extransfer/i,
     ];
-    const isIncomeDesc=d=>INCOME_PATS.some(r=>r.test(d));
     for(const txn of allTxns){
       const spendHash=`${txn.date}|${txn.cardKey}|${(txn.description||'').slice(0,20)}|${parseFloat(txn.amount||0).toFixed(2)}`;
       if(existingHashes.has(spendHash))continue;
@@ -2848,7 +2851,7 @@ async function processQueue(){
           const descLow = desc.toLowerCase();
           const employer = employerKeywords.find(k=>descLow.includes(k)) || descLow.replace(/[^a-z]/g,'').slice(0,15);
           const amt = parseFloat(txn.amount).toFixed(2);
-          const ih = `income|${txn.date}|${employer}|${amt}`;
+          const ih = `income|${normDate(txn.date)}|${employer}|${amt}`;
           if(!existingHashes.has(ih) && !STATE.spendingHashes.includes(ih)){
             existingHashes.add(ih);
             STATE.spendingHashes.push(ih);
@@ -2876,8 +2879,12 @@ async function processQueue(){
     }
     item.txnCount=autoCommitted+needsReview;item._committed=autoCommitted;item._review=needsReview;
     item._deduped=(allTxns.length-autoCommitted-needsReview);item.status='done';
+    // Log import history
+    if(!STATE.importLog)STATE.importLog=[];
+    STATE.importLog.unshift({filename:item.filename,imported:new Date().toISOString(),count:autoCommitted+needsReview,deduped:allTxns.length-autoCommitted-needsReview,cardLabel:item.cardLabel||item.cardKey||'File',monthKey:item.monthKey});
+    if(STATE.importLog.length>200)STATE.importLog=STATE.importLog.slice(0,200);
   }
-  saveState();renderUploadQueue();updateReviewBadge();renderReviewQueue();renderSpendingTab();updateDashboard();renderAllCharts();
+  saveState();renderUploadQueue();updateReviewBadge();renderReviewQueue();renderSpendingTab();updateDashboard();renderAllCharts();renderImportHistory();
   const pending=STATE.reviewQueue.filter(t=>!t.reviewed).length;
   const totalCommitted=toProcess.reduce((s,i)=>s+(i._committed||0),0);
   const totalDeduped=toProcess.reduce((s,i)=>s+(i._deduped||0),0);
@@ -2925,29 +2932,26 @@ function renderReviewQueue(){
 function setCategory(idx,category){
   const txn = STATE.reviewQueue[idx];
   if(!txn) return;
-  const wasAi = txn.source === 'ai';
+  const prevCategory = txn.category;
+  const prevSource = txn.source;
   txn.category = category;
   txn.source = 'manual';
-  txn.confidence = 100; // Manual = highest confidence
+  txn.confidence = 100;
 
-  // ── Learning: extract a memorable keyword from the description and offer
-  // to save it as a custom rule. Next time we see this merchant, it auto-routes.
-  // Only prompt for corrections that overrode AI (signal it was wrong).
-  if(wasAi){
+  // Learn from any category correction (AI or rule-based)
+  if(prevCategory !== category && prevSource !== 'manual'){
     const desc = (txn.description||'').replace(/[#*0-9]+/g,'').trim();
-    // Take the first 1-3 meaningful words as the rule pattern
-    const words = desc.split(/\s+/).filter(w=>w.length>=3).slice(0,3);
+    const NOISE = /^(ach|the|and|from|for|inc|llc|corp|payment|deposit|credit|debit|purchase|pos|check|tst|sq)\b/i;
+    const words = desc.split(/\s+/).filter(w=>w.length>=3 && !NOISE.test(w)).slice(0,3);
     if(words.length){
       const pattern = words.join(' ');
-      // Don't prompt if a rule with this pattern already exists
       const exists = STATE.customRules.some(r=>r.pattern.toLowerCase()===pattern.toLowerCase());
       if(!exists){
-        // Use a non-blocking, dismissible suggestion bar at top of review card area
         setTimeout(()=>{
-          if(confirm(`Auto-categorize "${pattern}" as ${category} from now on?\n\nNext time any transaction containing "${pattern}" is imported, it'll be set to ${category} automatically.`)){
+          if(confirm(`Save rule: "${pattern}" → ${category}?\n\nFuture transactions with "${pattern}" will auto-categorize.`)){
             STATE.customRules.unshift({pattern, category});
             saveState();
-            showToast(`✓ Rule saved: ${pattern} → ${category}`,'success');
+            showToast(`✓ Rule: ${pattern} → ${category}`,'success');
           }
         },50);
       }
@@ -2982,6 +2986,17 @@ function acceptAllAndCommit(){
   commitAll();
 }
 function updateReviewBadge(){const n=STATE.reviewQueue.filter(t=>!t.reviewed).length;const b=document.getElementById('review-badge');b.textContent=n;b.style.display=n>0?'inline':'none';}
+function renderImportHistory(){
+  const wrap=document.getElementById('import-history-wrap');
+  if(!wrap)return;
+  const log=(STATE.importLog||[]).slice(0,20);
+  if(!log.length){wrap.innerHTML='';return;}
+  wrap.innerHTML=`<div class="section-label" style="margin-top:8px">Recent Imports</div><div class="card" style="padding:0;overflow:hidden">${log.map(e=>{
+    const d=new Date(e.imported);
+    const dt=d.toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    return`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)"><div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.filename}</div><div style="font-size:9px;color:var(--muted);margin-top:2px">${dt} · ${e.cardLabel||''}</div></div><div style="text-align:right;font-size:10px;font-family:'DM Mono',monospace;color:var(--accent);white-space:nowrap">+${e.count}${e.deduped>0?` (${e.deduped} skip)`:''}</div></div>`;
+  }).join('')}</div>`;
+}
 
 // ── AI Categorization ─────────────────────────────────────────────────────────
 // Centralized Claude API caller. Uses the correct browser-access header
@@ -3096,12 +3111,20 @@ async function aiCategorizeAll(){
   const pending = STATE.reviewQueue.filter(t=>!t.reviewed && t.confidence < STATE.settings.confidenceThreshold);
   if(!pending.length){showToast('Nothing needs AI help','error'); return;}
 
-  showToast(`Sending ${pending.length} to Claude…`);
+  // Re-apply custom rules before sending to AI — user may have added rules after initial parse
+  for(const txn of pending){
+    const r=categorizeTransaction(txn);
+    if(r.source==='custom'){txn.category=r.category;txn.confidence=99;txn.source='custom';}
+  }
+  const aiPending=pending.filter(t=>t.confidence<STATE.settings.confidenceThreshold);
+  if(!aiPending.length){saveState();renderReviewQueue();updateReviewBadge();showToast('Custom rules handled all items','success');return;}
+
+  showToast(`Sending ${aiPending.length} to Claude…`);
   let updated = 0, failed = 0;
 
   // Process in batches so a single bad response doesn't kill everything
-  for(let i=0; i<pending.length; i+=AI_BATCH_SIZE){
-    const slice = pending.slice(i, i+AI_BATCH_SIZE);
+  for(let i=0; i<aiPending.length; i+=AI_BATCH_SIZE){
+    const slice = aiPending.slice(i, i+AI_BATCH_SIZE);
     const batch = slice.map(t=>({
       id: t.id,
       description: t.description,
@@ -3130,8 +3153,8 @@ async function aiCategorizeAll(){
       failed += slice.length;
       console.error('[AI batch failed]', err);
     }
-    if(pending.length > AI_BATCH_SIZE){
-      showToast(`AI working… ${Math.min(i+AI_BATCH_SIZE,pending.length)}/${pending.length}`);
+    if(aiPending.length > AI_BATCH_SIZE){
+      showToast(`AI working… ${Math.min(i+AI_BATCH_SIZE,aiPending.length)}/${aiPending.length}`);
     }
   }
 
@@ -3639,6 +3662,7 @@ function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name)?.classList.add('active');
   document.querySelector(`[data-tab="${name}"]`)?.classList.add('active');
+  if(name==='import')renderImportHistory();
   if(name==='spending'){renderSpendingTab();setTimeout(renderSpendingCharts,50);}
   if(name==='income')renderIncomeTab();
   if(name==='investments'){renderInvestmentsTab();setTimeout(()=>{renderInvestmentCharts();},80);}
