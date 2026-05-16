@@ -2148,6 +2148,24 @@ function loadState(){
   if(!STATE.accounts||Object.keys(STATE.accounts).length===0)STATE.accounts={...DEFAULT_ACCOUNTS};
   if(!STATE.last4Registry['8629'])STATE.last4Registry['8629']='chaseFreedom';
   if(!STATE.last4Registry['9323'])STATE.last4Registry['9323']='sapphire';
+  // One-time dedup of accumulated duplicate income items (hash format drift)
+  let incomeDedupDirty=false;
+  for(const mk of Object.keys(STATE.income||{})){
+    const bucket=STATE.income[mk];
+    if(!bucket||!Array.isArray(bucket.items))continue;
+    const seen=new Set();
+    const deduped=[];
+    for(const it of bucket.items){
+      const key=`${normDate(it.date)}|${(it.desc||'').trim()}|${parseFloat(it.amount).toFixed(2)}`;
+      if(!seen.has(key)){seen.add(key);deduped.push(it);}
+    }
+    if(deduped.length!==bucket.items.length){
+      bucket.total=deduped.reduce((s,i)=>s+i.amount,0);
+      bucket.items=deduped;
+      incomeDedupDirty=true;
+    }
+  }
+  if(incomeDedupDirty)setTimeout(()=>saveState(),0);
   applyTheme();
 }
 function saveState(){
@@ -2852,7 +2870,10 @@ async function processQueue(){
           const employer = employerKeywords.find(k=>descLow.includes(k)) || descLow.replace(/[^a-z]/g,'').slice(0,15);
           const amt = parseFloat(txn.amount).toFixed(2);
           const ih = `income|${normDate(txn.date)}|${employer}|${amt}`;
-          if(!existingHashes.has(ih) && !STATE.spendingHashes.includes(ih)){
+          const alreadyAdded = STATE.income[monthKey].items.some(
+            it => normDate(it.date)===normDate(txn.date) && Math.abs(it.amount-txn.amount)<0.01 && it.desc===desc
+          );
+          if(!existingHashes.has(ih) && !STATE.spendingHashes.includes(ih) && !alreadyAdded){
             existingHashes.add(ih);
             STATE.spendingHashes.push(ih);
             STATE.income[monthKey].total+=txn.amount;
