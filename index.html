@@ -2834,7 +2834,7 @@ async function processQueue(){
         }
         return item.monthKey;
       })();
-      const isBankItem=item.isBank||item.isSimplifi||item.cardKey==='keybankChecking'||item.cardKey==='sccuChecking'||item.cardKey==='co360';
+      const isBankItem=item.isBank||item.isMulti||item.isSimplifi||txn.isBank||item.cardKey==='keybankChecking'||item.cardKey==='sccuChecking'||item.cardKey==='co360';
       if(txn.isCredit&&isBankItem){
         const desc=txn.description||'';
         if(SKIP_CREDIT_PATS.some(r=>r.test(desc)))continue;
