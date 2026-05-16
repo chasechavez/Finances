@@ -1271,7 +1271,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
             <div id="sync-status" style="font-size:11px;margin-top:2px"><span style="color:var(--dim)">● Not configured</span></div>
           </div>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="pullFromGist(false).then(u=>{if(u){applyTheme();loadAccounts();updateDashboard();updateSectionTotals();renderSpendingTab();renderInvestmentsTab();renderDebtsTab();renderAutoTab();renderMiscTab();loadRental();renderRentalTab();updateReviewBadge();}})">Pull Now</button>
+            <button class="btn btn-ghost btn-sm" onclick="pullFromGist(false,true).then(u=>{if(u){applyTheme();loadAccounts();updateDashboard();updateSectionTotals();renderSpendingTab();renderInvestmentsTab();renderDebtsTab();renderAutoTab();renderMiscTab();loadRental();renderRentalTab();updateReviewBadge();}})">Pull Now</button>
             <button class="btn btn-primary btn-sm" onclick="saveSyncSettings()">Save</button>
           </div>
         </div>
@@ -4657,7 +4657,7 @@ async function pushToGist(){
 
 function schedulePush(){clearTimeout(_syncPushTimer);_syncPushTimer=setTimeout(pushToGist,4000);}
 
-async function pullFromGist(silent=false){
+async function pullFromGist(silent=false, force=false){
   const cfg=getSyncConfig();
   if(!cfg.pat||!cfg.gistId)return false;
   _syncStatus={state:'syncing',lastSync:_syncStatus.lastSync,error:''};renderSyncStatus();
@@ -4672,7 +4672,7 @@ async function pullFromGist(silent=false){
     const remote=JSON.parse(raw);
     const localTs=STATE.lastModified||0;
     const remoteTs=remote.lastModified||0;
-    if(remoteTs>localTs){
+    if(force||remoteTs>localTs){
       Object.assign(STATE,remote);
       STATE.budgets=STATE.budgets||{};
       STATE.customRules=STATE.customRules||[];
@@ -4683,9 +4683,11 @@ async function pullFromGist(silent=false){
       return true;
     }
     _syncStatus={state:'ok',lastSync:Date.now(),error:''};renderSyncStatus();
+    if(!silent)showToast('Already up to date','info');
     return false;
   }catch(e){
     _syncStatus={state:'error',lastSync:_syncStatus.lastSync,error:e.message};renderSyncStatus();
+    if(!silent)showToast(`Sync error: ${e.message}`,'error');
     return false;
   }
 }
