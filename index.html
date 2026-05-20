@@ -3341,7 +3341,7 @@ function renderSpendingTab(){
     const profile=CARD_PROFILES[cardKey];let ct=0;
     for(const[cat,amount]of Object.entries(cats)){if(cat==='_txns')continue;catTotals[cat]=(catTotals[cat]||0)+amount;if(cat==='Debt Payments')totalDebtPmts+=amount;else if(cat==='CC Payment'){/* tracked separately */}else if(!NON_SPEND.has(cat)&&amount>0){ct+=amount;totalSpent+=amount;}}
     if(ct!==0)cardTotals[cardKey]={total:ct,label:profile?.label||cardKey,owner:profile?.owner||''};
-    if(cats._txns)allTxns.push(...cats._txns);
+    if(cats._txns)allTxns.push(...cats._txns.map(t=>t.cardKey?t:{...t,cardKey,cardLabel:profile?.label||cardKey}));
   }
   const incomeData=STATE.income?.[key];if(incomeData?.total)totalIncome=incomeData.total;
   document.getElementById('sp-total').textContent='$'+Math.max(0,totalSpent).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
