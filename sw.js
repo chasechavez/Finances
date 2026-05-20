@@ -1,4 +1,4 @@
-const CACHE = 'wci-v1';
+const CACHE = 'wci-v2';
 const CDN_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
@@ -7,7 +7,7 @@ const CDN_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap',
 ];
-const APP_SHELL = ['./index.html', './manifest.json', './icon.svg'];
+const APP_SHELL = ['./index.html', './manifest.json', './icon.svg', './icon.png'];
 const NEVER_CACHE = ['api.anthropic.com', 'claude.ai'];
 
 self.addEventListener('install', e => {
