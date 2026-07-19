@@ -302,7 +302,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
             <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-capOneChase-balance">—</div>
           </div>
           <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
-            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Victoria Capital One Checking</div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Victoria Capital One Savings</div>
             <div style="font-size:10px;color:var(--dim);margin:2px 0">Personal · Freedom paydown</div>
             <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-capOneVic-balance">—</div>
           </div>
@@ -539,7 +539,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           </div>
           <div class="input-row">
             <div class="input-group"><div class="input-label">Capital One Checking — Chase (personal)</div><input class="input-field num" type="number" id="a-capOneChase" oninput="saveAccounts()"></div>
-            <div class="input-group"><div class="input-label">Capital One Checking — Victoria (personal)</div><input class="input-field num" type="number" id="a-capOneVic" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">Capital One Savings — Victoria (personal)</div><input class="input-field num" type="number" id="a-capOneVic" oninput="saveAccounts()"></div>
           </div>
           <div class="input-row">
             <div class="input-group"><div class="input-label">SCCU Checking (legacy — frozen)</div><input class="input-field num" type="number" id="a-sccuCheck" oninput="saveAccounts()"></div>
@@ -1310,6 +1310,16 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           <button class="btn btn-primary btn-sm" onclick="addLast4()">Add</button>
         </div>
       </div>
+      <div class="section-label">Bank Account Registry</div>
+      <div class="card" style="padding:12px 16px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Capital One bundles every 360 account into one combined statement — register each account number once so future imports route automatically instead of prompting.</div>
+        <div id="bank-acct-registry-list"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+          <input class="input-field num" type="text" id="new-bank-acct" placeholder="Account number" style="width:160px">
+          <select class="input-field" id="new-bank-acct-card" style="flex:1"><option value="">Select account...</option></select>
+          <button class="btn btn-primary btn-sm" onclick="addBankAcct()">Add</button>
+        </div>
+      </div>
       <div class="section-label">Card Profiles</div>
       <div class="card" style="padding:12px 16px"><div id="card-profiles-list"></div></div>
       <div class="section-label">Custom Merchant Rules</div>
@@ -1395,14 +1405,14 @@ const CARD_PROFILES={
   capitalOne:{label:'Capital One Venture X',owner:'Chase',paidFrom:'Capital One Checking (Chase)',color:'#38bdf8',filenameKeys:['capitalOne','capital_one','venturex','venture_x','venture'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description','Merchant'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],hintCatCol:['Category'],cardNoCol:['Card No.'],skipDesc:[/^payment/i,/^thank you/i,/^autopay/i]}},
   costco:{label:'Costco Citi Visa',owner:'Joint',paidFrom:'Capital One 360 (Joint Savings)',color:'#10b981',filenameKeys:['costco','citi','costcoCiti'],csvFormat:{dateCol:['Date'],descCol:['Description'],mode:'split',debitCol:['Debit','Amount'],creditCol:['Credit'],skipDesc:[/^payment/i,/^online payment/i,/^credit/i]}},
   sapphire:{label:'Chase Sapphire Reserve',owner:'Joint',paidFrom:'Capital One 360 (Joint Savings)',color:'#f59e0b',filenameKeys:['sapphire','csr','chase9323','9323'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,hintCatCol:['Category'],typeCol:['Type'],skipType:['Payment','Adjustment'],skipDesc:[/^payment/i]}},
-  chaseFreedom:{label:'Chase Freedom Unlimited',owner:'Victoria',paidFrom:'Capital One Checking (Victoria)',color:'#f87171',filenameKeys:['chaseFreedom','chase_freedom','freedom','chase8629','8629'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,hintCatCol:['Category'],typeCol:['Type'],skipType:['Payment','Adjustment'],skipDesc:[/^payment/i]}},
+  chaseFreedom:{label:'Chase Freedom Unlimited',owner:'Victoria',paidFrom:'Capital One Savings (Victoria)',color:'#f87171',filenameKeys:['chaseFreedom','chase_freedom','freedom','chase8629','8629'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,hintCatCol:['Category'],typeCol:['Type'],skipType:['Payment','Adjustment'],skipDesc:[/^payment/i]}},
   sccu:{label:'SCCU Card',owner:'Chase',paidFrom:'SCCU Checking (legacy)',color:'#06b6d4',filenameKeys:['sccu_card','sccuCard'],csvFormat:{dateCol:['Date','Transaction Date'],descCol:['Description','Memo'],mode:'split',debitCol:['Debit','Withdrawal','Amount'],creditCol:['Credit','Deposit'],skipDesc:[/^payment/i,/^transfer/i]}},
   sccuChecking:{label:'SCCU Checking',owner:'Chase',color:'#64748b',isBank:true,filenameKeys:['sccu_checking','sccuChecking'],csvFormat:{dateCol:['Date','Transaction Date'],descCol:['Description','Memo'],mode:'split',debitCol:['Debit','Withdrawal'],creditCol:['Credit','Deposit','Amount'],skipDesc:[/^transfer/i,/^opening/i]}},
   keybankChecking:{label:'Keybank Checking',owner:'Joint',color:'#64748b',isBank:true,filenameKeys:['keybank','keybankChecking'],csvFormat:{dateCol:['Date','Transaction Date'],descCol:['Description','Merchant','Memo'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,skipDesc:[/^transfer/i]}},
   ally:{label:'Ally Savings',owner:'Joint',color:'#64748b',isBank:true,filenameKeys:['ally','ally_savings'],csvFormat:{dateCol:['Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,skipDesc:[/^transfer/i,/^interest/i]}},
   co360:{label:'Capital One 360',owner:'Joint',color:'#64748b',isBank:true,filenameKeys:['co360','capitalOne360','360performance','360savings','performancesavings','360performancesavings'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}},
   capOneChase:{label:'Capital One Checking (Chase)',owner:'Chase',color:'#0ea5e9',isBank:true,filenameKeys:['capOneChase','capone_chase','caponechase','chasechecking','chase_checking','chase360checking'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}},
-  capOneVic:{label:'Capital One Checking (Victoria)',owner:'Victoria',color:'#0891b2',isBank:true,filenameKeys:['capOneVic','capone_victoria','capone_vic','caponevic','victoriachecking','victoria_checking','victoria360checking'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}}
+  capOneVic:{label:'Capital One Savings (Victoria)',owner:'Victoria',color:'#0891b2',isBank:true,filenameKeys:['capOneVic','capone_victoria','capone_vic','caponevic','victoriachecking','victoria_checking','victoria360checking','victoriasavings','victoria_savings','victoria360savings'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}}
 };
 
 const FINGERPRINTS=[
@@ -2153,16 +2163,13 @@ function detectFromPdfText(text,filename){
   if(t.includes('sapphire reserve')||fn.includes('9323'))
     return{cardKey:'sapphire',profile:CARD_PROFILES.sapphire,confidence:'high',isPdf:true};
   if(t.includes('venture x')||t.includes('ending in 8484')||fn.includes('8484')||(t.includes('capital one')&&t.includes('venture')&&!t.includes('performance savings')))return{cardKey:'capitalOne',profile:CARD_PROFILES.capitalOne,confidence:'high',isPdf:true};
-  if(t.includes('360 checking')||(t.includes('capital one')&&t.includes('checking account'))){
-    if(fn.includes('caponechase')||fn.includes('capone_chase')||fn.includes('chasechecking')||fn.includes('chase_checking'))
-      return{cardKey:'capOneChase',profile:CARD_PROFILES.capOneChase,confidence:'high',isPdf:true,isBank:true};
-    if(fn.includes('caponevic')||fn.includes('capone_victoria')||fn.includes('capone_vic')||fn.includes('victoriachecking')||fn.includes('victoria_checking'))
-      return{cardKey:'capOneVic',profile:CARD_PROFILES.capOneVic,confidence:'high',isPdf:true,isBank:true};
-    return{cardKey:null,profile:null,confidence:'low',ambiguous:true,isPdf:true,isBank:true,candidates:['capOneChase','capOneVic']};
-  }
-  if(t.includes('360 performance savings')||t.includes('36263304379')||
-     (t.includes('capital one')&&(t.includes('savings account')||t.includes('savings...')||t.includes('bank statement'))))
-    return{cardKey:'co360',profile:CARD_PROFILES.co360,confidence:'high',isPdf:true,isBank:true,balanceOnly:false};
+  // Capital One bundles every "360" sub-account (Joint Savings hub, personal savings/checking)
+  // into ONE combined statement PDF per login — confirmed against a real June 2026 statement.
+  // Route the whole file to the multi-account parser; it splits by account-number section header
+  // and resolves each section via the registry (STATE.bankAcctRegistry), same pattern as SCCU.
+  if(t.includes('360 performance savings')||t.includes('360 checking')||
+     (t.includes('capital one')&&(t.includes('savings account')||t.includes('checking account')||t.includes('bank statement'))))
+    return{cardKey:'capone360_multi',profile:null,confidence:'high',isPdf:true,isMulti:true};
   if(t.includes('ally bank')||(t.includes('ally')&&t.includes('savings account')))return{cardKey:'ally',profile:CARD_PROFILES.ally,confidence:'high',isPdf:true,isBank:true,balanceOnly:true};
   if(t.includes('space coast credit union')||t.includes('sccu.com'))return{cardKey:'sccu_multi',profile:null,confidence:'high',isPdf:true,isMulti:true};
   if(t.includes('aidvantage'))return{cardKey:'aidvantage_loan',profile:null,confidence:'high',isPdf:true,isLoan:true};
@@ -2267,7 +2274,7 @@ function parseSimplifiCSV(csvText){
 }
 
 // STATE
-let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{},monthlyLog:{},importLog:[],settings:{apiKey:'',proxyUrl:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};
+let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{},bankAcctRegistry:{},monthlyLog:{},importLog:[],settings:{apiKey:'',proxyUrl:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};
 
 const DEFAULT_ACCOUNTS={chaseGross:4583.33,chaseTakeHome:3553.80,chaseMatch:0,vicGross:37500,vicTakeHome:2000,vicMatch:4,fixedExp:5690,emergMonths:6,emergFund:11000,hsa:11883.87,hsaContrib:712,aidvantage:43666,aidvantageRate:6.08,edfinancial:116343.56,edfinancialRate:5.83,ecsi:52092,ecsiRate:5.0,ufcom:9597,ufcomRate:6.0,auto:12241,autoRate:6.74,furniture:2075,mortgage:250000,origMortgage:285000,mortgageRate:6.875,chase403bContrib:0,vic401kContrib:23500,chaseRothContrib:7000,vicRothContrib:7000,chaseNM401k:0,chaseNM401kContrib:4400,vicMegaBackdoorContrib:33750};
 
@@ -2290,6 +2297,7 @@ function loadState(){
   STATE.ui=STATE.ui||{};
   STATE.ui.spendingMonth=STATE.ui.spendingMonth||`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   STATE.last4Registry=STATE.last4Registry||{};
+  STATE.bankAcctRegistry=STATE.bankAcctRegistry||{};
   STATE.monthlyLog=STATE.monthlyLog||{};
   STATE.investments=STATE.investments||{};
   STATE.income=STATE.income||{};
@@ -2304,6 +2312,8 @@ function loadState(){
   if(!STATE.accounts||Object.keys(STATE.accounts).length===0)STATE.accounts={...DEFAULT_ACCOUNTS};
   if(!STATE.last4Registry['8629'])STATE.last4Registry['8629']='chaseFreedom';
   if(!STATE.last4Registry['9323'])STATE.last4Registry['9323']='sapphire';
+  // Confirmed against a real Jun 2026 statement: 36263304379 is the Joint Savings hub.
+  if(!STATE.bankAcctRegistry['36263304379'])STATE.bankAcctRegistry['36263304379']='co360';
   // One-time dedup of accumulated duplicate income items (hash format drift)
   let incomeDedupDirty=false;
   for(const mk of Object.keys(STATE.income||{})){
@@ -2524,7 +2534,7 @@ async function handleFiles(files){
             detection = {cardKey:aiKey, profile:null, confidence:'medium', isLoan:true};
           }else if(aiKey==='hsa_he'){
             detection = {cardKey:aiKey, profile:null, confidence:'medium', balanceOnly:true, isHSA:true};
-          }else if(aiKey==='sccu_multi'){
+          }else if(aiKey==='sccu_multi'||aiKey==='capone360_multi'){
             detection = {cardKey:aiKey, profile:null, confidence:'medium', isMulti:true};
           }else if(CARD_PROFILES[aiKey]){
             detection = {cardKey:aiKey, profile:CARD_PROFILES[aiKey], confidence:'medium',
@@ -2535,7 +2545,7 @@ async function handleFiles(files){
       }
     }
 
-    const statusLabel=detection.cardKey==='fidelity_403b_nb'?'Fidelity 403b (NetBenefits)':detection.isInvestment?'Investment · '+detection.invType:detection.isSimplifi?'SCCU Checking':detection.isMulti?'SCCU Multi-Account':detection.isLoan?'Aidvantage Loan':detection.isHSA?'Health Equity HSA':detection.balanceOnly?(detection.cardKey==='ally'?'Ally Savings':'Balance Statement'):detection.profile?.label||'Unknown';
+    const statusLabel=detection.cardKey==='fidelity_403b_nb'?'Fidelity 403b (NetBenefits)':detection.isInvestment?'Investment · '+detection.invType:detection.isSimplifi?'SCCU Checking':detection.cardKey==='capone360_multi'?'Capital One 360 Multi-Account':detection.isMulti?'SCCU Multi-Account':detection.isLoan?'Aidvantage Loan':detection.isHSA?'Health Equity HSA':detection.balanceOnly?(detection.cardKey==='ally'?'Ally Savings':'Balance Statement'):detection.profile?.label||'Unknown';
     const item={file,filename:fn,csvText,pdfText,isPdf,cardKey:detection.cardKey,cardProfile:detection.profile,monthKey:monthYear.key,monthLabel:`${MONTHS[monthYear.month-1]} ${monthYear.year}`,confidence:detection.confidence,ambiguous:detection.ambiguous||false,candidates:detection.candidates||[],isMulti:detection.isMulti||false,isLoan:detection.isLoan||false,isBank:detection.isBank||false,isSimplifi:detection.isSimplifi||false,isInvestment:detection.isInvestment||false,invType:detection.invType||null,balanceOnly:detection.balanceOnly||false,isHSA:detection.isHSA||false,statusLabel,status:detection.cardKey?'ready':detection.ambiguous?'ambiguous':'unrecognized',txnCount:0};
     uploadQueue.push(item);
     if(detection.ambiguous&&detection.candidates?.length)await promptCardPick(uploadQueue.length-1);
@@ -2757,58 +2767,97 @@ function parseChaseCardPdf(text, cardKey) {
 // Format: "Jan 5 Deposit from ORLANDO HEALTH PAYROLL Credit + $400.00 $11,923.05"
 // Credits (income): "Deposit from ..." with Category=Credit
 // Debits (CC payments): "Withdrawal from ..." with Category=Debit  
-function parseCO360Pdf(text, year) {
-  const txns = [];
+// Capital One bundles every "360" sub-account (Joint Savings hub + each person's personal
+// savings/checking) into ONE combined statement PDF per login — confirmed against a real
+// statement. Splits by "360 Performance Savings - ACCOUNTNUMBER" section headers and returns
+// one result per account found: {acctNum, txns, closingBalance}.
+//
+// Handles a real layout quirk: long descriptions wrap to their own line, which can leave the
+// date/Credit-Debit/amount/balance on a line with NO inline description at all (e.g. a
+// "Preauthorized Deposit from ... checking account ..." row splits into 3 output lines with the
+// amount line in the middle, description-only fragments before and after). The anchor regex
+// makes both the date and the description optional and reassembles them from context so these
+// transactions aren't silently dropped.
+function parseCapOne360MultiPdf(text) {
   const MONTH_MAP = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-  
-  // Skip patterns - these are not real transactions
-  const SKIP = [
-    /opening balance/i,
-    /closing balance/i,
-    /interest rate change/i,
-    /monthly interest paid/i,
-    /annual percentage yield/i,
-  ];
+  const MONTH_RE = '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)';
+  const yearM = text.match(/(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
+  const year = yearM ? yearM[1] : new Date().getFullYear().toString();
 
-  const lines = text.split('\n');
-  
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    
-    // Match: "Jan 5 Description Credit/Debit +/- $amount $balance"
-    // or:    "Jan 5 Description Credit + $400.00 $11,923.05"
-    const m = trimmed.match(
-      /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s+(.+?)\s+(Credit|Debit)\s+[+\-]\s+\$([\d,]+\.\d{2})\s+\$[\d,]+\.\d{2}\s*$/i
-    );
-    if (!m) continue;
-    
-    const [, mon, day, desc, creditDebit, amtStr] = m;
-    const monthNum = MONTH_MAP[mon.toLowerCase()];
-    if (!monthNum) continue;
-    
-    // Skip non-transactions
-    if (SKIP.some(r => r.test(desc))) continue;
-    
-    const amount = parseFloat(amtStr.replace(/,/g, ''));
-    if (!amount || amount <= 0) continue;
-    
-    const isCredit = creditDebit.toLowerCase() === 'credit';
-    const dateStr = `${String(monthNum).padStart(2,'0')}/${String(day).padStart(2,'0')}/${year}`;
-    
-    txns.push({
+  const SECTION_RE = /360\s*Performance\s*Savings\s*[-–—]\s*(\d{6,})/i;
+  const ANCHOR_RE = new RegExp('^(?:'+MONTH_RE+'\\s+(\\d{1,2})\\s*)?(.*?)\\s*(Credit|Debit)\\s+[+\\-]\\s*\\$([\\d,]+\\.\\d{2})\\s+\\$[\\d,]+\\.\\d{2}\\s*$','i');
+  const DATE_ONLY_RE = new RegExp('^'+MONTH_RE+'\\s+(\\d{1,2})\\b','i');
+  const EXCLUDE_DESC_RE = /^\d+(\.\d+)?%|^\$[\d,]+\.\d{2}$|^\d+$|annual percentage yield|ytd interest|days in statement|date\s+description\s+category|360\s*performance\s*savings|^all accounts$|^account name$|statement period|^page\s+\d+|capitalone\.com|^joint with|opening balance|closing balance|interest rate change|monthly interest paid/i;
+
+  function isPlainDescLine(l){
+    if(!l)return false;
+    if(ANCHOR_RE.test(l))return false;
+    if(SECTION_RE.test(l))return false;
+    if(EXCLUDE_DESC_RE.test(l))return false;
+    return true;
+  }
+
+  const results = [];
+  let current = null;
+  const lines = text.split('\n').map(l=>l.trim());
+
+  for(let i=0;i<lines.length;i++){
+    const line = lines[i];
+    if(!line)continue;
+
+    const sectionM = line.match(SECTION_RE);
+    if(sectionM){
+      if(current)results.push(current);
+      current = {acctNum: sectionM[1], txns: [], closingBalance: null};
+      continue;
+    }
+    if(!current)continue;
+
+    const closeM = line.match(/Closing Balance\s+\$([\d,]+\.\d{2})\s*$/i);
+    if(closeM){current.closingBalance=parseFloat(closeM[1].replace(/,/g,''));continue;}
+
+    if(/opening balance|interest rate change/i.test(line))continue;
+
+    const m = line.match(ANCHOR_RE);
+    if(!m)continue;
+
+    const[, mon, day, inlineDesc, creditDebit, amtStr] = m;
+    let desc = (inlineDesc||'').trim();
+
+    let monthTok=mon, dayTok=day;
+    if(!monthTok){
+      for(let j=i-1;j>=Math.max(0,i-3);j--){
+        const dm=lines[j].match(DATE_ONLY_RE);
+        if(dm){monthTok=dm[1];dayTok=dm[2];break;}
+      }
+    }
+    if(!monthTok)continue; // can't place this transaction in time — skip rather than guess
+
+    if(desc.length<3){
+      const prev=(i>0&&isPlainDescLine(lines[i-1]))?lines[i-1]:'';
+      const next=(i<lines.length-1&&isPlainDescLine(lines[i+1]))?lines[i+1]:'';
+      desc=[prev,desc,next].filter(Boolean).join(' ').trim();
+    }
+    if(!desc)desc='(no description)';
+    if(/monthly interest paid/i.test(desc))continue;
+
+    const monthNum = MONTH_MAP[monthTok.toLowerCase()];
+    const amount = parseFloat(amtStr.replace(/,/g,''));
+    if(!amount||amount<=0)continue;
+
+    current.txns.push({
       id: Math.random().toString(36).slice(2),
-      date: dateStr,
-      description: desc.trim(),
+      date: `${String(monthNum).padStart(2,'0')}/${String(dayTok).padStart(2,'0')}/${year}`,
+      description: desc,
       amount,
-      isCredit,
+      isCredit: creditDebit.toLowerCase()==='credit',
       isBank: true,
       hintCategory: '',
       preCategory: null,
     });
   }
-  
-  return txns;
+  if(current)results.push(current);
+  return results;
 }
 
 function parseSCCUAutoLoanCSV(csvText){
@@ -2869,7 +2918,7 @@ async function processQueue(){
         allTxns=parseKeybankCSV(item.csvText).map(t=>({...t,cardKey:'keybankChecking',cardLabel:'Keybank Checking'}));
       }
       // ── SCCU Multi-Account PDF ────────────────────────────────────────────
-      else if(item.isMulti&&item.isPdf){
+      else if(item.isMulti&&item.isPdf&&item.cardKey==='sccu_multi'){
         const results=parseSCCUPdf(item.pdfText);
         for(const r of results){
           if(r.balanceOnly){
@@ -2879,6 +2928,28 @@ async function processQueue(){
           }
           allTxns.push(...r.txns.map(t=>({...t,cardKey:r.cardKey,cardLabel:CARD_PROFILES[r.cardKey]?.label||r.cardKey})));
         }
+      }
+      // ── Capital One 360-family Multi-Account PDF ──────────────────────────
+      // Splits into per-account sections; only sections with a registered account
+      // number (STATE.bankAcctRegistry) get their transactions committed. Unmapped
+      // sections update nothing and surface a toast so nothing is silently
+      // misattributed — register the account number in Settings, then re-import.
+      else if(item.isMulti&&item.isPdf&&item.cardKey==='capone360_multi'){
+        const results=parseCapOne360MultiPdf(item.pdfText);
+        const unmapped=[];
+        for(const r of results){
+          const mappedKey=STATE.bankAcctRegistry[r.acctNum];
+          if(!mappedKey||!CARD_PROFILES[mappedKey]){
+            if(r.txns.length||r.closingBalance!==null)unmapped.push(r.acctNum);
+            continue;
+          }
+          if(r.closingBalance!=null){
+            STATE.accounts[mappedKey]=r.closingBalance;
+            const el=document.getElementById('a-'+mappedKey);if(el)el.value=r.closingBalance;
+          }
+          allTxns.push(...r.txns.map(t=>({...t,cardKey:mappedKey,cardLabel:CARD_PROFILES[mappedKey].label})));
+        }
+        if(unmapped.length){saveState();showToast(`Account ...${unmapped.map(n=>n.slice(-4)).join(', ...')} not registered — add it in Settings → Bank Account Registry, then re-import`,'error');}
       }
       // ── Balance-only PDFs (Ally) ──────────────────────────────────────────
       else if(item.balanceOnly&&item.isPdf&&item.cardKey==='ally'){
@@ -3405,6 +3476,7 @@ Also valid keys for special cases:
 - "investment_fidelity403b" — Fidelity 403(b) CSV
 - "investment_robinhood" — Robinhood CSV
 - "sccu_multi" — SCCU multi-account combined PDF
+- "capone360_multi" — Capital One 360 multi-account combined PDF (Joint Savings hub + personal savings/checking bundled into one statement)
 
 Return ONLY a JSON object: {"cardKey":"<key>", "confidence":"high|medium|low", "reason":"<one short sentence>"}.
 If you cannot identify it, return {"cardKey":null,"confidence":"low","reason":"..."}.`;
@@ -3816,6 +3888,9 @@ function renderCardProfiles(){document.getElementById('card-profiles-list').inne
 function renderLast4Registry(){const entries=Object.entries(STATE.last4Registry);document.getElementById('last4-registry-list').innerHTML=entries.length?entries.map(([last4,cardKey])=>{const p=CARD_PROFILES[cardKey];return`<div class="last4-row"><span class="last4-badge">...${last4}</span><span style="color:var(--text);flex:1">${p?.label||cardKey}</span><span style="font-size:9px;color:var(--muted)">${p?.owner||''}</span><button class="rule-delete" onclick="delete STATE.last4Registry['${last4}'];saveState();renderLast4Registry()">×</button></div>`;}).join(''):'<div style="font-size:11px;color:var(--dim);padding:4px 0">No entries yet.</div>';}
 function addLast4(){const last4=document.getElementById('new-last4').value.trim(),cardKey=document.getElementById('new-last4-card').value;if(!last4||last4.length!==4||!/^\d{4}$/.test(last4)){showToast('Enter valid 4 digits','error');return;}if(!cardKey){showToast('Select a card','error');return;}STATE.last4Registry[last4]=cardKey;document.getElementById('new-last4').value='';document.getElementById('new-last4-card').value='';saveState();renderLast4Registry();showToast(`...${last4} saved`,'success');}
 function populateLast4CardSelect(){const sel=document.getElementById('new-last4-card');Object.entries(CARD_PROFILES).forEach(([k,p])=>{const o=document.createElement('option');o.value=k;o.textContent=`${p.label} (${p.owner})`;sel.add(o);});}
+function renderBankAcctRegistry(){const entries=Object.entries(STATE.bankAcctRegistry);document.getElementById('bank-acct-registry-list').innerHTML=entries.length?entries.map(([acctNum,cardKey])=>{const p=CARD_PROFILES[cardKey];return`<div class="last4-row"><span class="last4-badge">...${acctNum.slice(-4)}</span><span style="color:var(--text);flex:1">${p?.label||cardKey}</span><span style="font-size:9px;color:var(--muted)">${p?.owner||''}</span><button class="rule-delete" onclick="delete STATE.bankAcctRegistry['${acctNum}'];saveState();renderBankAcctRegistry()">×</button></div>`;}).join(''):'<div style="font-size:11px;color:var(--dim);padding:4px 0">No entries yet.</div>';}
+function addBankAcct(){const acctNum=document.getElementById('new-bank-acct').value.trim(),cardKey=document.getElementById('new-bank-acct-card').value;if(!acctNum||!/^\d{4,}$/.test(acctNum)){showToast('Enter a valid account number','error');return;}if(!cardKey){showToast('Select an account','error');return;}STATE.bankAcctRegistry[acctNum]=cardKey;document.getElementById('new-bank-acct').value='';document.getElementById('new-bank-acct-card').value='';saveState();renderBankAcctRegistry();showToast(`...${acctNum.slice(-4)} saved`,'success');}
+function populateBankAcctCardSelect(){const sel=document.getElementById('new-bank-acct-card');Object.entries(CARD_PROFILES).filter(([,p])=>p.isBank).forEach(([k,p])=>{const o=document.createElement('option');o.value=k;o.textContent=`${p.label} (${p.owner})`;sel.add(o);});}
 function renderCustomRules(){document.getElementById('custom-rules-list').innerHTML=STATE.customRules.length?STATE.customRules.map((r,i)=>`<div class="rule-row"><span class="rule-pattern">${r.pattern}</span><span class="rule-arrow">→</span><span class="rule-cat">${r.category}</span><button class="rule-delete" onclick="STATE.customRules.splice(${i},1);saveState();renderCustomRules()">×</button></div>`).join(''):'<div style="font-size:11px;color:var(--dim);padding:4px 0">No custom rules</div>';const sel=document.getElementById('new-rule-cat');if(sel&&sel.options.length<=1)CATEGORIES.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.add(o);});}
 function addCustomRule(){const p=document.getElementById('new-rule-pattern').value.trim(),c=document.getElementById('new-rule-cat').value;if(!p||!c){showToast('Enter pattern and category','error');return;}STATE.customRules.unshift({pattern:p,category:c});document.getElementById('new-rule-pattern').value='';document.getElementById('new-rule-cat').value='';saveState();renderCustomRules();showToast('Rule added','success');}
 function openApiKeyModal(){
@@ -3842,7 +3917,7 @@ function saveApiKey(){
 
 // Data management
 function saveBackup(){const blob=new Blob([JSON.stringify({...STATE,_version:4,_exported:new Date().toISOString()},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`wci-backup-${new Date().toISOString().split('T')[0]}.json`;a.click();showToast('Backup downloaded','success');}
-function importBackup(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{STATE={...STATE,...JSON.parse(e.target.result)};STATE.spendingHashes=STATE.spendingHashes||[];STATE.investments=STATE.investments||{};saveState();loadAccounts();applyTheme();updateDashboard();renderSpendingTab();renderReviewQueue();updateReviewBadge();renderLast4Registry();renderLogPills();renderAllCharts();renderInvestmentCharts();showToast('Backup loaded','success');}catch(err){showToast('Invalid backup: '+err.message,'error');}};r.readAsText(file);input.value='';}
+function importBackup(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{STATE={...STATE,...JSON.parse(e.target.result)};STATE.spendingHashes=STATE.spendingHashes||[];STATE.investments=STATE.investments||{};STATE.bankAcctRegistry=STATE.bankAcctRegistry||{};saveState();loadAccounts();applyTheme();updateDashboard();renderSpendingTab();renderReviewQueue();updateReviewBadge();renderLast4Registry();renderBankAcctRegistry();renderLogPills();renderAllCharts();renderInvestmentCharts();showToast('Backup loaded','success');}catch(err){showToast('Invalid backup: '+err.message,'error');}};r.readAsText(file);input.value='';}
 function confirmClearSpending(){
   if(!confirm('Clear all spending transactions and hashes? Account balances are kept. You can then reimport your statements fresh.'))return;
   STATE.spending={};STATE.spendingHashes=[];STATE.reviewQueue=[];STATE.income={};
@@ -3857,7 +3932,7 @@ function confirmClearIncome(){
   saveState();renderSpendingTab();updateDashboard();renderAllCharts();
   showToast('Income cleared — reimport bank statements to repopulate','success');
 }
-function confirmClearAll(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('wci_state_v6');STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{'8629':'chaseFreedom','9323':'sapphire'},monthlyLog:{},settings:{apiKey:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};const now=new Date();STATE.ui.spendingMonth=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;updateDashboard();renderSpendingTab();renderReviewQueue();updateReviewBadge();renderAllCharts();showToast('All data cleared','success');}
+function confirmClearAll(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('wci_state_v6');STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{'8629':'chaseFreedom','9323':'sapphire'},bankAcctRegistry:{'36263304379':'co360'},monthlyLog:{},settings:{apiKey:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};const now=new Date();STATE.ui.spendingMonth=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;updateDashboard();renderSpendingTab();renderReviewQueue();updateReviewBadge();renderAllCharts();showToast('All data cleared','success');}
 
 // UI helpers
 function toggleCollapse(listId,chevronId){const list=document.getElementById(listId),chev=document.getElementById(chevronId);if(!list)return;const hidden=list.style.display==='none';list.style.display=hidden?'':'none';if(chev)chev.style.transform=hidden?'':'rotate(-90deg)';}
@@ -4866,6 +4941,7 @@ loadState();
 loadAccounts();
 renderCardProfiles();
 renderLast4Registry();
+renderBankAcctRegistry();
 renderCustomRules();
 renderReviewQueue();
 renderSpendingTab();
@@ -4873,6 +4949,7 @@ renderLogPills();
 updateDashboard();
 updateReviewBadge();
 populateLast4CardSelect();
+populateBankAcctCardSelect();
 initManualForm();
 initSync();
 if(STATE.settings.apiKey)document.getElementById('apikey-display').textContent=STATE.settings.apiKey.slice(0,12)+'...'+(STATE.settings.proxyUrl?' · proxied':' · NO PROXY');
