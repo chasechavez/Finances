@@ -270,6 +270,50 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div class="section-label">WCI Strategy Alerts</div>
       <div class="card" id="d-strategies"></div>
 
+      <!-- Money Flow -->
+      <div class="section-label">💸 Money Flow</div>
+      <div class="card">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:10px">Both paychecks land in Joint Savings first — every other account is funded from there</div>
+        <div style="background:var(--elevated);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:12px;text-align:center">
+          <div style="font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Hub Account</div>
+          <div style="font-size:15px;font-weight:600;margin-top:2px">Capital One 360 — Joint Savings</div>
+          <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px" id="mf-hub-balance">—</div>
+        </div>
+        <div style="text-align:center;color:var(--dim);font-size:18px;line-height:1;margin:6px 0">↓</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Keybank</div>
+            <div style="font-size:10px;color:var(--dim);margin:2px 0">Rent / utilities / bills</div>
+            <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-keybank-balance">—</div>
+          </div>
+          <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Ally</div>
+            <div style="font-size:10px;color:var(--dim);margin:2px 0">Emergency fund</div>
+            <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-ally-balance">—</div>
+          </div>
+          <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Chase Capital One Checking</div>
+            <div style="font-size:10px;color:var(--dim);margin:2px 0">Personal · Venture X paydown</div>
+            <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-capOneChase-balance">—</div>
+          </div>
+          <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Victoria Capital One Checking</div>
+            <div style="font-size:10px;color:var(--dim);margin:2px 0">Personal · Freedom paydown</div>
+            <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-capOneVic-balance">—</div>
+          </div>
+          <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Shared Cards</div>
+            <div style="font-size:10px;color:var(--dim);margin:2px 0">Costco Citi · Sapphire</div>
+            <div style="font-size:12px;font-weight:600">Paid in full monthly</div>
+          </div>
+          <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">After-Tax Retirement</div>
+            <div style="font-size:10px;color:var(--dim);margin:2px 0">Backdoor + Mega Backdoor Roth</div>
+            <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-retirement-flow">—</div>
+          </div>
+        </div>
+      </div>
+
       <!-- This Month Cash Flow -->
       <div class="section-label">This Month Cash Flow</div>
       <div class="card" id="d-lastSpending"><div class="empty-state" style="padding:16px"><div class="empty-icon">📤</div><div class="empty-title">No spending data yet</div><div class="empty-sub">Import CSV statements</div></div></div>
@@ -3741,7 +3785,21 @@ function updateDashboard(){
   strats.push({i:'📋',t:'Backdoor Roth: Switch method once MAGI exceeds $236K MFJ threshold',c:'neutral'});
   setHTML('d-strategies',strats.map(s=>`<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)"><span>${s.i}</span><span style="font-size:11px;color:${s.c==='negative'?'var(--danger)':s.c==='positive'?'var(--accent)':'var(--muted)'};line-height:1.5">${s.t}</span></div>`).join(''));
   {const now=new Date();const curKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;const curIncome=STATE.income?.[curKey]?.total||0;const NON_SPEND_CF=new Set(['Debt Payments','Income','Transfer','CC Payment']);let curConsumer=0,curDebt=0,curCC=0;for(const cats of Object.values(STATE.spending?.[curKey]||{})){for(const[cat,amt]of Object.entries(cats)){if(cat==='_txns')continue;if(cat==='Debt Payments')curDebt+=amt;else if(cat==='CC Payment')curCC+=amt;else if(!NON_SPEND_CF.has(cat)&&amt>0)curConsumer+=amt;}}const curTotalExp=curConsumer+curDebt+curCC;const curNet=curIncome-curTotalExp;const netColor=curNet>=0?'var(--accent)':'var(--danger)';const curMonthLabel=MONTHS_FULL[now.getMonth()]+' '+now.getFullYear();if(curIncome>0||curTotalExp>0){setHTML('d-lastSpending',`<div class="card-title">${curMonthLabel}<span style="font-size:10px;color:${netColor}">${curNet>=0?'+':'−'}${fmt(Math.abs(curNet))}</span></div><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--muted)">Income</span><span class="num positive">+${fmt(curIncome)}</span></div><div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--muted)">Consumer Spending</span><span class="num negative">−${fmt(curConsumer)}</span></div>${curDebt>0?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--muted)">Debt Payments</span><span class="num negative">−${fmt(curDebt)}</span></div>`:''}${curCC>0?`<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--muted)">CC Payments</span><span class="num" style="color:var(--muted)">−${fmt(curCC)}</span></div>`:''}<div style="border-top:1px solid var(--border);padding-top:6px;display:flex;justify-content:space-between;font-size:13px;font-weight:600"><span>Net Cash Flow</span><span class="num" style="color:${netColor}">${curNet>=0?'+':'−'}${fmt(Math.abs(curNet))}</span></div></div>`);}else{setHTML('d-lastSpending','<div class="empty-state" style="padding:16px"><div class="empty-icon">📊</div><div class="empty-title">No data this month yet</div><div class="empty-sub">Import statements or log snapshot</div></div>');}}
+  renderMoneyFlow();
   updateSectionTotals();
+}
+
+function renderMoneyFlow(){
+  const a=STATE.accounts,g=v=>(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
+  const fmt=n=>'$'+n.toLocaleString('en-US',{maximumFractionDigits:0});
+  const setT=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setT('mf-hub-balance',fmt(g('co360')));
+  setT('mf-keybank-balance',fmt(g('keybank')));
+  setT('mf-ally-balance',fmt(g('emergFund')));
+  setT('mf-capOneChase-balance',fmt(g('capOneChase')));
+  setT('mf-capOneVic-balance',fmt(g('capOneVic')));
+  const retFlow=g('chaseRothContrib')+g('vicRothContrib')+g('vicMegaBackdoorContrib');
+  setT('mf-retirement-flow',fmt(retFlow)+'/yr');
 }
 
 function updateSectionTotals(){const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(a[v]||0),t=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};t('sec-cash-total','$'+(g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360')+g('capOneChase')+g('capOneVic')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-retirement-total','$'+(g('chase403b')+g('chaseNM401k')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-debt-total','−$'+(g('aidvantage')+g('edfinancial')+g('ecsi')+g('ufcom')+g('auto')+g('furniture')+g('mortgage')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-income-total','$'+(g('chaseGross')+g('vicGross')).toLocaleString('en-US',{maximumFractionDigits:0})+'/mo');}
