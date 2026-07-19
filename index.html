@@ -317,7 +317,10 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
         <div class="naming-row"><span class="naming-file">Chase9323_Activity_...CSV</span><span class="naming-maps">→ Sapphire Reserve (Joint)</span></div>
         <div class="naming-row"><span class="naming-file">CapitalOne_Apr_2026.csv</span><span class="naming-maps">→ Capital One Venture X</span></div>
         <div class="naming-row"><span class="naming-file">Costco_Apr_2026.csv</span><span class="naming-maps">→ Citi format auto-detected</span></div>
-        <div class="naming-row"><span class="naming-file">SCCU_Checking_Apr_2026.csv</span><span class="naming-maps">→ SCCU Checking (bank)</span></div>
+        <div class="naming-row"><span class="naming-file">SCCU_Checking_Apr_2026.csv</span><span class="naming-maps">→ SCCU Checking (legacy — historical import only)</span></div>
+        <div class="naming-row"><span class="naming-file">CapOneChase_Apr_2026.csv</span><span class="naming-maps">→ Capital One Checking (Chase)</span></div>
+        <div class="naming-row"><span class="naming-file">CapOneVic_Apr_2026.csv</span><span class="naming-maps">→ Capital One Checking (Victoria)</span></div>
+        <div class="naming-row"><span class="naming-file">(ambiguous Capital One file)</span><span class="naming-maps">→ prompts you to pick the account (Joint Savings vs. Chase vs. Victoria checking) — CSV/PDF column layout is identical across all three</span></div>
         <div class="naming-row"><span class="naming-file">Accounts_History__1_.csv</span><span class="naming-maps">→ Fidelity all accounts (auto)</span></div>
         <div class="naming-row"><span class="naming-file">History_for_Account_38187.csv</span><span class="naming-maps">→ Fidelity 403b (auto)</span></div>
         <div class="naming-row"><span class="naming-file">54da5e3a-...csv (Robinhood)</span><span class="naming-maps">→ Robinhood (Trans Code col)</span></div>
@@ -482,12 +485,16 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
             <div class="input-group"><div class="input-label">HSA Monthly Contrib</div><input class="input-field num" type="number" id="a-hsaContrib" oninput="saveAccounts()"></div>
           </div>
           <div class="input-row">
-            <div class="input-group"><div class="input-label">SCCU Checking</div><input class="input-field num" type="number" id="a-sccuCheck" oninput="saveAccounts()"></div>
-            <div class="input-group"><div class="input-label">SCCU Savings</div><input class="input-field num" type="number" id="a-sccuSav" oninput="saveAccounts()"></div>
-            <div class="input-group"><div class="input-label">Keybank Checking</div><input class="input-field num" type="number" id="a-keybank" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">Capital One 360 — Joint Savings (hub)</div><input class="input-field num" type="number" id="a-co360" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">Keybank Checking — rent/utilities/bills</div><input class="input-field num" type="number" id="a-keybank" oninput="saveAccounts()"></div>
           </div>
           <div class="input-row">
-            <div class="input-group"><div class="input-label">Capital One 360</div><input class="input-field num" type="number" id="a-co360" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">Capital One Checking — Chase (personal)</div><input class="input-field num" type="number" id="a-capOneChase" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">Capital One Checking — Victoria (personal)</div><input class="input-field num" type="number" id="a-capOneVic" oninput="saveAccounts()"></div>
+          </div>
+          <div class="input-row">
+            <div class="input-group"><div class="input-label">SCCU Checking (legacy — frozen)</div><input class="input-field num" type="number" id="a-sccuCheck" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">SCCU Savings (legacy — frozen)</div><input class="input-field num" type="number" id="a-sccuSav" oninput="saveAccounts()"></div>
           </div>
         </div>
       </div>
@@ -544,6 +551,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           <div class="input-row">
             <div class="input-group"><div class="input-label">Auto — Toyota Corolla</div><input class="input-field num" type="number" id="a-auto" oninput="saveAccounts()"></div>
             <div class="input-group"><div class="input-label">Rate %</div><input class="input-field num" type="number" step="0.1" id="a-autoRate" oninput="saveAccounts()"></div>
+          </div>
+          <div class="input-row">
+            <div class="input-group" style="flex-direction:row;align-items:center;gap:8px"><input type="checkbox" id="a-autoPaidOff" onchange="saveAutoPaidOff()" style="width:16px;height:16px"><div class="input-label" style="margin:0">Auto loan paid off</div></div>
           </div>
           <div class="input-row">
             <div class="input-group"><div class="input-label">Furniture — Synchrony</div><input class="input-field num" type="number" id="a-furniture" oninput="saveAccounts()"></div>
@@ -968,9 +978,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div style="background:linear-gradient(135deg,rgba(56,189,248,0.12),rgba(14,165,233,0.06));border:1px solid rgba(56,189,248,0.25);border-radius:var(--radius);padding:20px;display:flex;align-items:flex-start;gap:16px">
         <div style="font-size:40px;flex-shrink:0">🚗</div>
         <div style="flex:1">
-          <div style="font-size:10px;color:var(--info);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:4px">2021 Toyota Corolla</div>
+          <div style="font-size:10px;color:var(--info);text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:4px">2021 Toyota Corolla <span id="auto-paid-badge" style="display:none;color:var(--accent);background:var(--accent-glow);border-radius:20px;padding:2px 8px;letter-spacing:0.5px;margin-left:4px">PAID OFF</span></div>
           <div style="font-size:28px;font-weight:600;font-family:'DM Mono',monospace;color:var(--danger)" id="auto-balance">—</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:4px">SCCU Auto Loan @ <span id="auto-rate-hero">6.74</span>%</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px" id="auto-rate-line">SCCU Auto Loan @ <span id="auto-rate-hero">6.74</span>%</div>
         </div>
         <div style="text-align:right">
           <div style="font-size:9px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Est. Monthly Pmt</div>
@@ -1322,15 +1332,17 @@ const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov',
 const MONTHS_FULL=['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 const CARD_PROFILES={
-  capitalOne:{label:'Capital One Venture X',owner:'Chase',color:'#38bdf8',filenameKeys:['capitalOne','capital_one','venturex','venture_x','venture'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description','Merchant'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],hintCatCol:['Category'],cardNoCol:['Card No.'],skipDesc:[/^payment/i,/^thank you/i,/^autopay/i]}},
-  costco:{label:'Costco Citi Visa',owner:'Joint',color:'#10b981',filenameKeys:['costco','citi','costcoCiti'],csvFormat:{dateCol:['Date'],descCol:['Description'],mode:'split',debitCol:['Debit','Amount'],creditCol:['Credit'],skipDesc:[/^payment/i,/^online payment/i,/^credit/i]}},
-  sapphire:{label:'Chase Sapphire Reserve',owner:'Joint',color:'#f59e0b',filenameKeys:['sapphire','csr','chase9323','9323'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,hintCatCol:['Category'],typeCol:['Type'],skipType:['Payment','Adjustment'],skipDesc:[/^payment/i]}},
-  chaseFreedom:{label:'Chase Freedom Unlimited',owner:'Victoria',color:'#f87171',filenameKeys:['chaseFreedom','chase_freedom','freedom','chase8629','8629'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,hintCatCol:['Category'],typeCol:['Type'],skipType:['Payment','Adjustment'],skipDesc:[/^payment/i]}},
-  sccu:{label:'SCCU Card',owner:'Chase',color:'#06b6d4',filenameKeys:['sccu_card','sccuCard'],csvFormat:{dateCol:['Date','Transaction Date'],descCol:['Description','Memo'],mode:'split',debitCol:['Debit','Withdrawal','Amount'],creditCol:['Credit','Deposit'],skipDesc:[/^payment/i,/^transfer/i]}},
+  capitalOne:{label:'Capital One Venture X',owner:'Chase',paidFrom:'Capital One Checking (Chase)',color:'#38bdf8',filenameKeys:['capitalOne','capital_one','venturex','venture_x','venture'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description','Merchant'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],hintCatCol:['Category'],cardNoCol:['Card No.'],skipDesc:[/^payment/i,/^thank you/i,/^autopay/i]}},
+  costco:{label:'Costco Citi Visa',owner:'Joint',paidFrom:'Capital One 360 (Joint Savings)',color:'#10b981',filenameKeys:['costco','citi','costcoCiti'],csvFormat:{dateCol:['Date'],descCol:['Description'],mode:'split',debitCol:['Debit','Amount'],creditCol:['Credit'],skipDesc:[/^payment/i,/^online payment/i,/^credit/i]}},
+  sapphire:{label:'Chase Sapphire Reserve',owner:'Joint',paidFrom:'Capital One 360 (Joint Savings)',color:'#f59e0b',filenameKeys:['sapphire','csr','chase9323','9323'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,hintCatCol:['Category'],typeCol:['Type'],skipType:['Payment','Adjustment'],skipDesc:[/^payment/i]}},
+  chaseFreedom:{label:'Chase Freedom Unlimited',owner:'Victoria',paidFrom:'Capital One Checking (Victoria)',color:'#f87171',filenameKeys:['chaseFreedom','chase_freedom','freedom','chase8629','8629'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,hintCatCol:['Category'],typeCol:['Type'],skipType:['Payment','Adjustment'],skipDesc:[/^payment/i]}},
+  sccu:{label:'SCCU Card',owner:'Chase',paidFrom:'SCCU Checking (legacy)',color:'#06b6d4',filenameKeys:['sccu_card','sccuCard'],csvFormat:{dateCol:['Date','Transaction Date'],descCol:['Description','Memo'],mode:'split',debitCol:['Debit','Withdrawal','Amount'],creditCol:['Credit','Deposit'],skipDesc:[/^payment/i,/^transfer/i]}},
   sccuChecking:{label:'SCCU Checking',owner:'Chase',color:'#64748b',isBank:true,filenameKeys:['sccu_checking','sccuChecking'],csvFormat:{dateCol:['Date','Transaction Date'],descCol:['Description','Memo'],mode:'split',debitCol:['Debit','Withdrawal'],creditCol:['Credit','Deposit','Amount'],skipDesc:[/^transfer/i,/^opening/i]}},
   keybankChecking:{label:'Keybank Checking',owner:'Joint',color:'#64748b',isBank:true,filenameKeys:['keybank','keybankChecking'],csvFormat:{dateCol:['Date','Transaction Date'],descCol:['Description','Merchant','Memo'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,skipDesc:[/^transfer/i]}},
   ally:{label:'Ally Savings',owner:'Joint',color:'#64748b',isBank:true,filenameKeys:['ally','ally_savings'],csvFormat:{dateCol:['Date'],descCol:['Description'],mode:'single',amountCol:['Amount'],negativeIsCharge:true,skipDesc:[/^transfer/i,/^interest/i]}},
-  co360:{label:'Capital One 360',owner:'Joint',color:'#64748b',isBank:true,filenameKeys:['co360','capitalOne360','360performance','360savings','performancesavings','360performancesavings'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}}
+  co360:{label:'Capital One 360',owner:'Joint',color:'#64748b',isBank:true,filenameKeys:['co360','capitalOne360','360performance','360savings','performancesavings','360performancesavings'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}},
+  capOneChase:{label:'Capital One Checking (Chase)',owner:'Chase',color:'#0ea5e9',isBank:true,filenameKeys:['capOneChase','capone_chase','caponechase','chasechecking','chase_checking','chase360checking'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}},
+  capOneVic:{label:'Capital One Checking (Victoria)',owner:'Victoria',color:'#0891b2',isBank:true,filenameKeys:['capOneVic','capone_victoria','capone_vic','caponevic','victoriachecking','victoria_checking','victoria360checking'],csvFormat:{dateCol:['Transaction Date','Date'],descCol:['Transaction Description','Description'],typeCol:['Transaction Type'],skipType:['Interest','Adjustment'],mode:'split',debitCol:['Debit'],creditCol:['Credit'],skipDesc:[/^interest/i,/^opening balance/i,/^closing balance/i]}}
 };
 
 const FINGERPRINTS=[
@@ -1339,7 +1351,7 @@ const FINGERPRINTS=[
   {name:'citi',cardKey:'costco',mustHave:['Date','Description','Debit','Credit'],mustNotHave:['Transaction Date','Posted Date','Type','Amount','Balance','Time','Memo','Post Date'],confidence:'high'},
   {name:'ally',cardKey:'ally',mustHave:['Date','Time','Amount','Type','Description'],mustNotHave:['Balance','Card No.','Post Date','Debit','Credit'],confidence:'high'},
   {name:'sccuChecking',cardKey:'sccuChecking',mustHave:['Date','Description','Debit','Credit','Balance'],mustNotHave:['Time','Amount','Card No.','Post Date','Transaction Date'],confidence:'high'},
-  {name:'co360',cardKey:'co360',mustHave:['Transaction Date','Transaction Type','Transaction Description','Debit','Credit','Balance'],mustNotHave:['Card No.','Post Date','Type','Memo','Amount'],confidence:'high'},
+  {name:'co360',cardKey:null,mustHave:['Transaction Date','Transaction Type','Transaction Description','Debit','Credit','Balance'],mustNotHave:['Card No.','Post Date','Type','Memo','Amount'],confidence:'medium',candidates:['co360','capOneChase','capOneVic']},
   {name:'keybank',cardKey:'keybankChecking',mustHave:['Date','Description','Amount','Balance'],mustNotHave:['Time','Debit','Credit','Card No.','Post Date','Type'],confidence:'medium'},
   {name:'sccuCard',cardKey:'sccu',mustHave:['Date','Description','Debit','Credit'],mustNotHave:['Balance','Time','Transaction Date','Card No.','Post Date'],confidence:'medium'},
 ];
@@ -1376,6 +1388,17 @@ function detectCard(filename,csvText){
     if(fnLower.includes('freedom')||fnLower.includes('8629'))return{cardKey:'chaseFreedom',profile:CARD_PROFILES.chaseFreedom,confidence:'high'};
     if(fnLower.includes('sapphire')||fnLower.includes('9323'))return{cardKey:'sapphire',profile:CARD_PROFILES.sapphire,confidence:'high'};
     return{cardKey:null,profile:null,confidence:'low',ambiguous:true,candidates:fp.candidates,last4,fingerprint:fp.name};
+  }
+  if(fp.name==='co360'){
+    // Capital One 360 (Joint Savings), and the two personal Capital One checking
+    // accounts, all export the identical column shape — filename is the only
+    // signal that tells them apart, so resolve by filename first, else prompt.
+    const fnLower=filename.toLowerCase().replace(/[\s\-]/g,'_');
+    for(const key of['capOneChase','capOneVic','co360']){
+      if(CARD_PROFILES[key].filenameKeys.some(k=>fnLower.includes(k.toLowerCase().replace(/[\s\-]/g,'_'))))
+        return{cardKey:key,profile:CARD_PROFILES[key],confidence:'high',isBank:true};
+    }
+    return{cardKey:null,profile:null,confidence:'low',ambiguous:true,isBank:true,candidates:fp.candidates,fingerprint:fp.name};
   }
   if(fp.cardKey)return{cardKey:fp.cardKey,profile:CARD_PROFILES[fp.cardKey],confidence:fp.confidence};
   return detectFromFilenameOnly(filename);
@@ -2070,6 +2093,13 @@ function detectFromPdfText(text,filename){
   if(t.includes('sapphire reserve')||fn.includes('9323'))
     return{cardKey:'sapphire',profile:CARD_PROFILES.sapphire,confidence:'high',isPdf:true};
   if(t.includes('venture x')||t.includes('ending in 8484')||fn.includes('8484')||(t.includes('capital one')&&t.includes('venture')&&!t.includes('performance savings')))return{cardKey:'capitalOne',profile:CARD_PROFILES.capitalOne,confidence:'high',isPdf:true};
+  if(t.includes('360 checking')||(t.includes('capital one')&&t.includes('checking account'))){
+    if(fn.includes('caponechase')||fn.includes('capone_chase')||fn.includes('chasechecking')||fn.includes('chase_checking'))
+      return{cardKey:'capOneChase',profile:CARD_PROFILES.capOneChase,confidence:'high',isPdf:true,isBank:true};
+    if(fn.includes('caponevic')||fn.includes('capone_victoria')||fn.includes('capone_vic')||fn.includes('victoriachecking')||fn.includes('victoria_checking'))
+      return{cardKey:'capOneVic',profile:CARD_PROFILES.capOneVic,confidence:'high',isPdf:true,isBank:true};
+    return{cardKey:null,profile:null,confidence:'low',ambiguous:true,isPdf:true,isBank:true,candidates:['capOneChase','capOneVic']};
+  }
   if(t.includes('360 performance savings')||t.includes('36263304379')||
      (t.includes('capital one')&&(t.includes('savings account')||t.includes('savings...')||t.includes('bank statement'))))
     return{cardKey:'co360',profile:CARD_PROFILES.co360,confidence:'high',isPdf:true,isBank:true,balanceOnly:false};
@@ -2282,14 +2312,16 @@ function toggleTheme(){const isLight=document.documentElement.classList.toggle('
 function applyTheme(){if(STATE.ui?.lightMode){document.documentElement.classList.add('light-mode');const btn=document.getElementById('theme-btn');if(btn)btn.textContent='☀️';}}
 
 function saveAccounts(){
-  const ids=['chaseGross','chaseTakeHome','chaseMatch','vicGross','vicTakeHome','vicMatch','fixedExp','emergMonths','rentalIncome','rentalExpenses','emergFund','hsa','hsaContrib','sccuCheck','sccuSav','keybank','co360','chase403b','chase403bContrib','vic401k','vic401kContrib','chaseRoth','chaseRothContrib','vicRoth','vicRothContrib','fidelityBrok','robinhood','aidvantage','aidvantageRate','edfinancial','edfinancialRate','ecsi','ecsiRate','ufcom','ufcomRate','auto','autoRate','furniture','mortgage','origMortgage','mortgageRate'];
+  const ids=['chaseGross','chaseTakeHome','chaseMatch','vicGross','vicTakeHome','vicMatch','fixedExp','emergMonths','rentalIncome','rentalExpenses','emergFund','hsa','hsaContrib','sccuCheck','sccuSav','keybank','co360','capOneChase','capOneVic','chase403b','chase403bContrib','vic401k','vic401kContrib','chaseRoth','chaseRothContrib','vicRoth','vicRothContrib','fidelityBrok','robinhood','aidvantage','aidvantageRate','edfinancial','edfinancialRate','ecsi','ecsiRate','ufcom','ufcomRate','auto','autoRate','furniture','mortgage','origMortgage','mortgageRate'];
   ids.forEach(id=>{const el=document.getElementById('a-'+id);if(el)STATE.accounts[id]=parseFloat(el.value)||0;});
   saveState();updateDashboard();updateSectionTotals();
 }
 function loadAccounts(){
   Object.entries(DEFAULT_ACCOUNTS).forEach(([k,v])=>{if(STATE.accounts[k]===undefined||STATE.accounts[k]==='')STATE.accounts[k]=v;});
   Object.entries(STATE.accounts).forEach(([k,v])=>{const el=document.getElementById('a-'+k);if(el&&v!==undefined&&v!=='')el.value=v;});
+  const autoPaidOffEl=document.getElementById('a-autoPaidOff');if(autoPaidOffEl)autoPaidOffEl.checked=!!STATE.accounts.autoPaidOff;
 }
+function saveAutoPaidOff(){const el=document.getElementById('a-autoPaidOff');if(!el)return;STATE.accounts.autoPaidOff=el.checked;saveState();updateDashboard();updateSectionTotals();if(document.getElementById('tab-auto')?.classList.contains('active'))renderAutoTab();}
 function saveSettings(){STATE.settings.confidenceThreshold=parseInt(document.getElementById('conf-threshold').value)||80;saveState();}
 
 // CSV parsing
@@ -2840,12 +2872,14 @@ async function processQueue(){
         }
         allTxns=[]; // no spending txns to commit (HSA card swipes are NOT bank spending)
       }
-      // ── Capital One 360 Savings PDF ───────────────────────────────────────
-      else if(item.isPdf&&item.cardKey==='co360'&&item.isBank){
+      // ── Capital One 360 / Capital One Checking PDFs (Chase, Victoria) ──────
+      // Same export format across all three Capital One bank accounts — only
+      // the destination cardKey/label differs.
+      else if(item.isPdf&&['co360','capOneChase','capOneVic'].includes(item.cardKey)&&item.isBank){
         const yearM=item.pdfText?.match(/(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})/i);
         const yr=yearM?yearM[1]:new Date().getFullYear().toString();
         const txns=parseCO360Pdf(item.pdfText||'',yr);
-        allTxns=txns.map(t=>({...t,cardKey:'co360',cardLabel:'Capital One 360'}));
+        allTxns=txns.map(t=>({...t,cardKey:item.cardKey,cardLabel:CARD_PROFILES[item.cardKey].label}));
       }
       // ── Capital One Venture X PDF ─────────────────────────────────────────
       else if(item.isPdf&&item.cardKey==='capitalOne'){
@@ -2920,7 +2954,7 @@ async function processQueue(){
         }
         return item.monthKey;
       })();
-      const isBankItem=item.isBank||item.isMulti||item.isSimplifi||txn.isBank||item.cardKey==='keybankChecking'||item.cardKey==='sccuChecking'||item.cardKey==='co360';
+      const isBankItem=item.isBank||item.isMulti||item.isSimplifi||txn.isBank||item.cardKey==='keybankChecking'||item.cardKey==='sccuChecking'||item.cardKey==='co360'||item.cardKey==='capOneChase'||item.cardKey==='capOneVic';
       if(txn.isCredit&&isBankItem){
         const desc=txn.description||'';
         if(SKIP_CREDIT_PATS.some(r=>r.test(desc)))continue;
@@ -3537,7 +3571,7 @@ function applyTxnFilters(){if(!STATE._allTxns)return;let txns=STATE._allTxns;if(
 function filterTxns(q){_txnSearch=q;applyTxnFilters();}
 
 // Snapshot
-function computeSnapshotFromAccounts(){const a=STATE.accounts,g=v=>a[v]||0;const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360');const retAssets=g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');const totalAssets=cashAssets+retAssets,totalDebts=studentDebt+otherDebt+mortgage,netWorth=totalAssets-totalDebts;const monthlyGross=(g('chaseGross')+g('vicGross'));const annualGross=monthlyGross*12;const _ys=getYtdContributions();const retContribs=_ys.chase.retirement+_ys.victoria.retirement+_ys.chase.roth+_ys.victoria.roth+_ys.chase.hsa;return{totalAssets,totalDebts,netWorth,aidvantage:g('aidvantage'),edfinancial:g('edfinancial'),ecsi:g('ecsi'),ufcom:g('ufcom'),auto:g('auto'),furniture:g('furniture'),mortgage,emergencyFund:g('emergFund'),monthlyGross,fixedExpenses:g('fixedExp'),savingsRate:annualGross>0?(retContribs/annualGross*100):0,rentalIncome:g('rentalIncome'),rentalExpenses:g('rentalExpenses'),chase403b:g('chase403b'),vic401k:g('vic401k'),chaseRoth:g('chaseRoth'),vicRoth:g('vicRoth')};}
+function computeSnapshotFromAccounts(){const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(a[v]||0);const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360');const retAssets=g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');const totalAssets=cashAssets+retAssets,totalDebts=studentDebt+otherDebt+mortgage,netWorth=totalAssets-totalDebts;const monthlyGross=(g('chaseGross')+g('vicGross'));const annualGross=monthlyGross*12;const _ys=getYtdContributions();const retContribs=_ys.chase.retirement+_ys.victoria.retirement+_ys.chase.roth+_ys.victoria.roth+_ys.chase.hsa;return{totalAssets,totalDebts,netWorth,aidvantage:g('aidvantage'),edfinancial:g('edfinancial'),ecsi:g('ecsi'),ufcom:g('ufcom'),auto:g('auto'),furniture:g('furniture'),mortgage,emergencyFund:g('emergFund'),monthlyGross,fixedExpenses:g('fixedExp'),savingsRate:annualGross>0?(retContribs/annualGross*100):0,rentalIncome:g('rentalIncome'),rentalExpenses:g('rentalExpenses'),chase403b:g('chase403b'),vic401k:g('vic401k'),chaseRoth:g('chaseRoth'),vicRoth:g('vicRoth')};}
 function logSnapshot(){const now=new Date();const key=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;STATE.monthlyLog[key]=computeSnapshotFromAccounts();saveState();renderLogPills();renderAllCharts();showToast(`Snapshot logged for ${MONTHS[now.getMonth()]} ${now.getFullYear()}`,'success');}
 function deleteSnapshot(key){delete STATE.monthlyLog[key];saveState();renderLogPills();renderAllCharts();}
 function renderLogPills(){const container=document.getElementById('log-history-pills');const months=Object.keys(STATE.monthlyLog).sort();container.innerHTML=months.map(m=>{const[y,mo]=m.split('-').map(Number);return`<span class="log-pill" title="Click to delete" onclick="if(confirm('Delete?'))deleteSnapshot('${m}')">${MONTHS[mo-1]} ${y} ×</span>`;}).join('');}
@@ -3641,10 +3675,10 @@ function fmt(n,prefix='$'){return prefix+Math.abs(n).toLocaleString('en-US',{max
 function setEl(id,val,cls){const el=document.getElementById(id);if(!el)return;el.textContent=val;if(cls)el.className=el.className.replace(/(positive|negative|neutral)/g,'').trim()+' num '+cls;}
 
 function updateDashboard(){
-  const a=STATE.accounts,g=v=>(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
+  const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
   const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');
   const totalNonMortgage=studentDebt+otherDebt;
-  const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360');
+  const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360')+g('capOneChase')+g('capOneVic');
   const retAssets=g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');
   const totalAssets=cashAssets+retAssets,netWorth=totalAssets-totalNonMortgage-mortgage;
   const recentMonth=Object.keys(STATE.income||{}).sort().reverse()[0];
@@ -3699,10 +3733,10 @@ function updateDashboard(){
   updateSectionTotals();
 }
 
-function updateSectionTotals(){const a=STATE.accounts,g=v=>a[v]||0,t=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};t('sec-cash-total','$'+(g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-retirement-total','$'+(g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-debt-total','−$'+(g('aidvantage')+g('edfinancial')+g('ecsi')+g('ufcom')+g('auto')+g('furniture')+g('mortgage')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-income-total','$'+(g('chaseGross')+g('vicGross')).toLocaleString('en-US',{maximumFractionDigits:0})+'/mo');}
+function updateSectionTotals(){const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(a[v]||0),t=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};t('sec-cash-total','$'+(g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360')+g('capOneChase')+g('capOneVic')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-retirement-total','$'+(g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-debt-total','−$'+(g('aidvantage')+g('edfinancial')+g('ecsi')+g('ufcom')+g('auto')+g('furniture')+g('mortgage')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-income-total','$'+(g('chaseGross')+g('vicGross')).toLocaleString('en-US',{maximumFractionDigits:0})+'/mo');}
 
 // Settings
-function renderCardProfiles(){document.getElementById('card-profiles-list').innerHTML=Object.entries(CARD_PROFILES).map(([,p])=>`<div class="card-profile-row"><div class="card-profile-dot" style="background:${p.color}"></div><div style="flex:1"><div class="card-profile-name">${p.label}</div><div class="card-profile-meta">${p.filenameKeys.slice(0,3).join(', ')}</div></div><span class="card-profile-owner owner-${p.isBank?'bank':p.owner.toLowerCase()}">${p.isBank?'Bank':p.owner}</span></div>`).join('');}
+function renderCardProfiles(){document.getElementById('card-profiles-list').innerHTML=Object.entries(CARD_PROFILES).map(([,p])=>`<div class="card-profile-row"><div class="card-profile-dot" style="background:${p.color}"></div><div style="flex:1"><div class="card-profile-name">${p.label}</div><div class="card-profile-meta">${p.filenameKeys.slice(0,3).join(', ')}${p.paidFrom?' · Paid from: '+p.paidFrom:''}</div></div><span class="card-profile-owner owner-${p.isBank?'bank':p.owner.toLowerCase()}">${p.isBank?'Bank':p.owner}</span></div>`).join('');}
 function renderLast4Registry(){const entries=Object.entries(STATE.last4Registry);document.getElementById('last4-registry-list').innerHTML=entries.length?entries.map(([last4,cardKey])=>{const p=CARD_PROFILES[cardKey];return`<div class="last4-row"><span class="last4-badge">...${last4}</span><span style="color:var(--text);flex:1">${p?.label||cardKey}</span><span style="font-size:9px;color:var(--muted)">${p?.owner||''}</span><button class="rule-delete" onclick="delete STATE.last4Registry['${last4}'];saveState();renderLast4Registry()">×</button></div>`;}).join(''):'<div style="font-size:11px;color:var(--dim);padding:4px 0">No entries yet.</div>';}
 function addLast4(){const last4=document.getElementById('new-last4').value.trim(),cardKey=document.getElementById('new-last4-card').value;if(!last4||last4.length!==4||!/^\d{4}$/.test(last4)){showToast('Enter valid 4 digits','error');return;}if(!cardKey){showToast('Select a card','error');return;}STATE.last4Registry[last4]=cardKey;document.getElementById('new-last4').value='';document.getElementById('new-last4-card').value='';saveState();renderLast4Registry();showToast(`...${last4} saved`,'success');}
 function populateLast4CardSelect(){const sel=document.getElementById('new-last4-card');Object.entries(CARD_PROFILES).forEach(([k,p])=>{const o=document.createElement('option');o.value=k;o.textContent=`${p.label} (${p.owner})`;sel.add(o);});}
@@ -3984,17 +4018,20 @@ function renderAutoTab(){
   const a=STATE.accounts,g=v=>(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
   const fmt=n=>'$'+n.toLocaleString('en-US',{maximumFractionDigits:0});
   const setT=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  const bal=g('auto'),rate=g('autoRate')||6.74,orig=15000;
-  const pct=Math.max(0,Math.min((1-bal/orig)*100,100));
+  const paidOff=!!a.autoPaidOff;
+  const bal=paidOff?0:g('auto'),rate=g('autoRate')||6.74,orig=15000;
+  const pct=paidOff?100:Math.max(0,Math.min((1-bal/orig)*100,100));
   const mRate=rate/100/12;const nPmts=48;
   const pmt=bal>0&&mRate>0?bal*mRate/(1-Math.pow(1+mRate,-nPmts)):0;
   const totalLeft=pmt*nPmts,intLeft=Math.max(0,totalLeft-bal);
 
-  setT('auto-balance','−'+fmt(bal));setT('auto-rate-hero',rate.toFixed(2));
-  setT('auto-monthly-pmt',pmt>0?'~$'+Math.round(pmt):'—');
-  setT('auto-rate-tile',rate.toFixed(2)+'%');setT('auto-bal-tile','−'+fmt(bal));
-  setT('auto-pmt-tile',pmt>0?'~$'+Math.round(pmt):' —');setT('auto-int-left',intLeft>0?'~'+fmt(intLeft):'—');
-  setT('auto-pct-paid',pct.toFixed(0)+'% paid off');setT('auto-remaining',fmt(bal)+' remaining');setT('auto-orig-label','Original: ~'+fmt(orig));
+  const badgeEl=document.getElementById('auto-paid-badge');if(badgeEl)badgeEl.style.display=paidOff?'inline':'none';
+  const rateLineEl=document.getElementById('auto-rate-line');if(rateLineEl)rateLineEl.textContent=paidOff?'Loan closed':`SCCU Auto Loan @ ${rate.toFixed(2)}%`;
+  setT('auto-balance',paidOff?'$0':'−'+fmt(bal));
+  setT('auto-monthly-pmt',paidOff?'—':(pmt>0?'~$'+Math.round(pmt):'—'));
+  setT('auto-rate-tile',rate.toFixed(2)+'%');setT('auto-bal-tile',paidOff?'$0':'−'+fmt(bal));
+  setT('auto-pmt-tile',paidOff?'—':(pmt>0?'~$'+Math.round(pmt):' —'));setT('auto-int-left',paidOff?'$0':(intLeft>0?'~'+fmt(intLeft):'—'));
+  setT('auto-pct-paid',pct.toFixed(0)+'% paid off');setT('auto-remaining',paidOff?'$0 remaining':fmt(bal)+' remaining');setT('auto-orig-label','Original: ~'+fmt(orig));
   const autoBar=document.getElementById('auto-bar');if(autoBar)autoBar.style.width=pct.toFixed(1)+'%';
 
   // Auto payments from spending data
