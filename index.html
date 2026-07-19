@@ -505,8 +505,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
         </div>
         <div class="accounts-section-body">
           <div class="input-row">
-            <div class="input-group"><div class="input-label">Chase 403b — Fidelity</div><input class="input-field num" type="number" id="a-chase403b" oninput="saveAccounts()"></div>
-            <div class="input-group"><div class="input-label">403b Annual Contrib</div><input class="input-field num" type="number" id="a-chase403bContrib" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">Chase 403b — Fidelity (old employer, rolling over)</div><input class="input-field num" type="number" id="a-chase403b" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">403b Annual Contrib (dormant — $0 until rollover)</div><input class="input-field num" type="number" id="a-chase403bContrib" oninput="saveAccounts()"></div>
+          </div>
+          <div class="input-row">
+            <div class="input-group"><div class="input-label">Chase 401k — NM HealthCare (new employer)</div><input class="input-field num" type="number" id="a-chaseNM401k" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">401k Annual Contrib</div><input class="input-field num" type="number" id="a-chaseNM401kContrib" oninput="saveAccounts()"></div>
           </div>
           <div class="input-row">
             <div class="input-group"><div class="input-label">Victoria 401k — JH</div><input class="input-field num" type="number" id="a-vic401k" oninput="saveAccounts()"></div>
@@ -519,6 +523,9 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           <div class="input-row">
             <div class="input-group"><div class="input-label">Victoria Roth IRA</div><input class="input-field num" type="number" id="a-vicRoth" oninput="saveAccounts()"></div>
             <div class="input-group"><div class="input-label">Victoria Roth Contrib</div><input class="input-field num" type="number" id="a-vicRothContrib" oninput="saveAccounts()"></div>
+          </div>
+          <div class="input-row">
+            <div class="input-group"><div class="input-label">Victoria Mega Backdoor Roth — JH, Annual Contrib</div><input class="input-field num" type="number" id="a-vicMegaBackdoorContrib" oninput="saveAccounts()"></div>
           </div>
           <div class="input-row">
             <div class="input-group"><div class="input-label">Fidelity Brokerage</div><input class="input-field num" type="number" id="a-fidelityBrok" oninput="saveAccounts()"></div>
@@ -557,7 +564,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           </div>
           <div class="input-row">
             <div class="input-group"><div class="input-label">Furniture — Synchrony</div><input class="input-field num" type="number" id="a-furniture" oninput="saveAccounts()"></div>
-            <div class="input-group"><div class="input-label">Mortgage Balance</div><input class="input-field num" type="number" id="a-mortgage" oninput="saveAccounts()"></div>
+            <div class="input-group"><div class="input-label">Mortgage Balance — 713 Saint Michael Ln (FL rental)</div><input class="input-field num" type="number" id="a-mortgage" oninput="saveAccounts()"></div>
           </div>
           <div class="input-row">
             <div class="input-group"><div class="input-label">Original Mortgage</div><input class="input-field num" type="number" id="a-origMortgage" oninput="saveAccounts()"></div>
@@ -853,8 +860,12 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div class="section-label">Account Balances</div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">
-          <span style="color:var(--muted)">Chase 403b — Fidelity</span>
+          <span style="color:var(--muted)">Chase 403b — Fidelity (rolling over)</span>
           <span id="inv-det-403b" style="font-family:'DM Mono',monospace;font-weight:600">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">
+          <span style="color:var(--muted)">Chase 401k — NM HealthCare</span>
+          <span id="inv-det-nm401k" style="font-family:'DM Mono',monospace;font-weight:600">—</span>
         </div>
         <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:11px">
           <span style="color:var(--muted)">Victoria 401k — John Hancock</span>
@@ -962,7 +973,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div class="section-label">Mortgage</div>
       <div class="card">
         <div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:11px">
-          <span style="font-weight:600">Keybank Mortgage @ <span id="debt-mort-rate">6.875</span>%</span>
+          <span style="font-weight:600">713 Saint Michael Ln (FL rental) @ <span id="debt-mort-rate">6.875</span>%</span>
           <span id="debt-mort-bal" style="font-family:'DM Mono',monospace;color:var(--danger)">—</span>
         </div>
         <div class="progress-track"><div class="progress-fill" id="debt-mort-bar" style="background:var(--info)"></div></div>
@@ -2209,7 +2220,7 @@ function parseSimplifiCSV(csvText){
 // STATE
 let STATE={accounts:{},spending:{},spendingHashes:[],investments:{},income:{},reviewQueue:[],customRules:[],last4Registry:{},monthlyLog:{},importLog:[],settings:{apiKey:'',proxyUrl:'',confidenceThreshold:80},ui:{spendingMonth:null,lightMode:false}};
 
-const DEFAULT_ACCOUNTS={chaseGross:8207,chaseTakeHome:3553.80,chaseMatch:5,vicGross:3864.50,vicTakeHome:2000,vicMatch:2,fixedExp:3500,emergMonths:6,emergFund:1006,hsa:11883.87,hsaContrib:138.47,aidvantage:49014.99,aidvantageRate:7.1,edfinancial:136388,edfinancialRate:6.6,ecsi:52092,ecsiRate:5.0,ufcom:11060,ufcomRate:6.0,auto:12241,autoRate:6.74,furniture:2075,mortgage:250000,origMortgage:285000,mortgageRate:6.875,chase403bContrib:4100,vic401kContrib:5029,chaseRothContrib:7000,vicRothContrib:2400};
+const DEFAULT_ACCOUNTS={chaseGross:4583.33,chaseTakeHome:3553.80,chaseMatch:0,vicGross:37500,vicTakeHome:2000,vicMatch:4,fixedExp:5690,emergMonths:6,emergFund:11000,hsa:11883.87,hsaContrib:712,aidvantage:43666,aidvantageRate:6.08,edfinancial:116343.56,edfinancialRate:5.83,ecsi:52092,ecsiRate:5.0,ufcom:9597,ufcomRate:6.0,auto:12241,autoRate:6.74,furniture:2075,mortgage:250000,origMortgage:285000,mortgageRate:6.875,chase403bContrib:0,vic401kContrib:23500,chaseRothContrib:7000,vicRothContrib:7000,chaseNM401k:0,chaseNM401kContrib:4400,vicMegaBackdoorContrib:33750};
 
 function loadState(){
   try{
@@ -2312,7 +2323,7 @@ function toggleTheme(){const isLight=document.documentElement.classList.toggle('
 function applyTheme(){if(STATE.ui?.lightMode){document.documentElement.classList.add('light-mode');const btn=document.getElementById('theme-btn');if(btn)btn.textContent='☀️';}}
 
 function saveAccounts(){
-  const ids=['chaseGross','chaseTakeHome','chaseMatch','vicGross','vicTakeHome','vicMatch','fixedExp','emergMonths','rentalIncome','rentalExpenses','emergFund','hsa','hsaContrib','sccuCheck','sccuSav','keybank','co360','capOneChase','capOneVic','chase403b','chase403bContrib','vic401k','vic401kContrib','chaseRoth','chaseRothContrib','vicRoth','vicRothContrib','fidelityBrok','robinhood','aidvantage','aidvantageRate','edfinancial','edfinancialRate','ecsi','ecsiRate','ufcom','ufcomRate','auto','autoRate','furniture','mortgage','origMortgage','mortgageRate'];
+  const ids=['chaseGross','chaseTakeHome','chaseMatch','vicGross','vicTakeHome','vicMatch','fixedExp','emergMonths','rentalIncome','rentalExpenses','emergFund','hsa','hsaContrib','sccuCheck','sccuSav','keybank','co360','capOneChase','capOneVic','chase403b','chase403bContrib','chaseNM401k','chaseNM401kContrib','vic401k','vic401kContrib','chaseRoth','chaseRothContrib','vicRoth','vicRothContrib','vicMegaBackdoorContrib','fidelityBrok','robinhood','aidvantage','aidvantageRate','edfinancial','edfinancialRate','ecsi','ecsiRate','ufcom','ufcomRate','auto','autoRate','furniture','mortgage','origMortgage','mortgageRate'];
   ids.forEach(id=>{const el=document.getElementById('a-'+id);if(el)STATE.accounts[id]=parseFloat(el.value)||0;});
   saveState();updateDashboard();updateSectionTotals();
 }
@@ -3571,7 +3582,7 @@ function applyTxnFilters(){if(!STATE._allTxns)return;let txns=STATE._allTxns;if(
 function filterTxns(q){_txnSearch=q;applyTxnFilters();}
 
 // Snapshot
-function computeSnapshotFromAccounts(){const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(a[v]||0);const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360');const retAssets=g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');const totalAssets=cashAssets+retAssets,totalDebts=studentDebt+otherDebt+mortgage,netWorth=totalAssets-totalDebts;const monthlyGross=(g('chaseGross')+g('vicGross'));const annualGross=monthlyGross*12;const _ys=getYtdContributions();const retContribs=_ys.chase.retirement+_ys.victoria.retirement+_ys.chase.roth+_ys.victoria.roth+_ys.chase.hsa;return{totalAssets,totalDebts,netWorth,aidvantage:g('aidvantage'),edfinancial:g('edfinancial'),ecsi:g('ecsi'),ufcom:g('ufcom'),auto:g('auto'),furniture:g('furniture'),mortgage,emergencyFund:g('emergFund'),monthlyGross,fixedExpenses:g('fixedExp'),savingsRate:annualGross>0?(retContribs/annualGross*100):0,rentalIncome:g('rentalIncome'),rentalExpenses:g('rentalExpenses'),chase403b:g('chase403b'),vic401k:g('vic401k'),chaseRoth:g('chaseRoth'),vicRoth:g('vicRoth')};}
+function computeSnapshotFromAccounts(){const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(a[v]||0);const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360');const retAssets=g('chase403b')+g('chaseNM401k')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');const totalAssets=cashAssets+retAssets,totalDebts=studentDebt+otherDebt+mortgage,netWorth=totalAssets-totalDebts;const monthlyGross=(g('chaseGross')+g('vicGross'));const annualGross=monthlyGross*12;const _ys=getYtdContributions();const retContribs=_ys.chase.retirement+_ys.victoria.retirement+_ys.chase.roth+_ys.victoria.roth+_ys.chase.hsa;return{totalAssets,totalDebts,netWorth,aidvantage:g('aidvantage'),edfinancial:g('edfinancial'),ecsi:g('ecsi'),ufcom:g('ufcom'),auto:g('auto'),furniture:g('furniture'),mortgage,emergencyFund:g('emergFund'),monthlyGross,fixedExpenses:g('fixedExp'),savingsRate:annualGross>0?(retContribs/annualGross*100):0,rentalIncome:g('rentalIncome'),rentalExpenses:g('rentalExpenses'),chase403b:g('chase403b'),vic401k:g('vic401k'),chaseRoth:g('chaseRoth'),vicRoth:g('vicRoth')};}
 function logSnapshot(){const now=new Date();const key=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;STATE.monthlyLog[key]=computeSnapshotFromAccounts();saveState();renderLogPills();renderAllCharts();showToast(`Snapshot logged for ${MONTHS[now.getMonth()]} ${now.getFullYear()}`,'success');}
 function deleteSnapshot(key){delete STATE.monthlyLog[key];saveState();renderLogPills();renderAllCharts();}
 function renderLogPills(){const container=document.getElementById('log-history-pills');const months=Object.keys(STATE.monthlyLog).sort();container.innerHTML=months.map(m=>{const[y,mo]=m.split('-').map(Number);return`<span class="log-pill" title="Click to delete" onclick="if(confirm('Delete?'))deleteSnapshot('${m}')">${MONTHS[mo-1]} ${y} ×</span>`;}).join('');}
@@ -3679,7 +3690,7 @@ function updateDashboard(){
   const studentDebt=g('aidvantage')+g('ecsi')+g('edfinancial')+g('ufcom'),otherDebt=g('auto')+g('furniture'),mortgage=g('mortgage');
   const totalNonMortgage=studentDebt+otherDebt;
   const cashAssets=g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360')+g('capOneChase')+g('capOneVic');
-  const retAssets=g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');
+  const retAssets=g('chase403b')+g('chaseNM401k')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood');
   const totalAssets=cashAssets+retAssets,netWorth=totalAssets-totalNonMortgage-mortgage;
   const recentMonth=Object.keys(STATE.income||{}).sort().reverse()[0];
   const trackedIncome=recentMonth?(STATE.income[recentMonth]?.total||0):0;
@@ -3719,7 +3730,7 @@ function updateDashboard(){
   const emergTgtEl=document.getElementById('d-emergTarget');if(emergTgtEl)emergTgtEl.textContent='Target: '+fmt(emergTarget);
   const debtItems=[{label:'Aidvantage',key:'aidvantage',rate:g('aidvantageRate'),orig:Math.max(g('aidvantage')+2000,69000),color:'var(--danger)'},{label:'Edfinancial',key:'edfinancial',rate:g('edfinancialRate'),orig:Math.max(g('edfinancial'),136388),color:'var(--danger)'},{label:'ECSI (Deferred)',key:'ecsi',rate:g('ecsiRate'),orig:g('ecsi'),color:'var(--warn)'},{label:'UFCOM Selby',key:'ufcom',rate:g('ufcomRate'),orig:g('ufcom'),color:'var(--warn)'},{label:'Auto (Corolla)',key:'auto',rate:g('autoRate'),orig:15000,color:'var(--info)'},{label:'Furniture',key:'furniture',rate:0,orig:3000,color:'var(--purple)'}].filter(d=>g(d.key)>0);
   setHTML('d-debtBars',debtItems.map(d=>{const bal=g(d.key),pct=d.orig>0?Math.min((1-bal/d.orig)*100,100):0;return`<div class="progress-row"><div class="progress-meta"><span>${d.label}${d.rate?' '+d.rate+'%':''}</span><span>${fmt(bal)}</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct.toFixed(1)}%;background:${d.color}"></div></div></div>`;}).join('')||'<div style="color:var(--muted);font-size:11px;padding:4px 0">No debt balances entered</div>');
-  const total403b=g('chase403bContrib')+g('vic401kContrib'),totalRoth=g('chaseRothContrib')+g('vicRothContrib');
+  const total403b=g('chase403bContrib')+g('chaseNM401kContrib')+g('vic401kContrib'),totalRoth=g('chaseRothContrib')+g('vicRothContrib')+g('vicMegaBackdoorContrib');
   setHTML('d-retirementBars',`<div class="progress-row"><div class="progress-meta"><span>403b/401k — ${fmt(total403b)} contributed</span><span>$47,000 max</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(total403b/47000*100,100).toFixed(1)}%"></div></div></div><div class="progress-row"><div class="progress-meta"><span>Roth IRA — ${fmt(totalRoth)} contributed</span><span>$14,000 max</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(totalRoth/14000*100,100).toFixed(1)}%"></div></div></div><div class="progress-row"><div class="progress-meta"><span>Emergency Fund — ${emergMonths.toFixed(1)} / ${g('emergMonths')||6} months</span><span>${fmt(emergFund)}</span></div><div class="progress-track"><div class="progress-fill" style="width:${Math.min(emergMonths/(g('emergMonths')||6)*100,100).toFixed(1)}%;background:var(--warn)"></div></div></div>`);
   const strats=[];
   if(emergMonths<3)strats.push({i:'🛡️',t:`Emergency fund critical — ${emergMonths.toFixed(1)} months covered, target 6 months`,c:'negative'});
@@ -3733,7 +3744,7 @@ function updateDashboard(){
   updateSectionTotals();
 }
 
-function updateSectionTotals(){const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(a[v]||0),t=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};t('sec-cash-total','$'+(g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360')+g('capOneChase')+g('capOneVic')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-retirement-total','$'+(g('chase403b')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-debt-total','−$'+(g('aidvantage')+g('edfinancial')+g('ecsi')+g('ufcom')+g('auto')+g('furniture')+g('mortgage')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-income-total','$'+(g('chaseGross')+g('vicGross')).toLocaleString('en-US',{maximumFractionDigits:0})+'/mo');}
+function updateSectionTotals(){const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(a[v]||0),t=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};t('sec-cash-total','$'+(g('emergFund')+g('hsa')+g('sccuCheck')+g('sccuSav')+g('keybank')+g('co360')+g('capOneChase')+g('capOneVic')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-retirement-total','$'+(g('chase403b')+g('chaseNM401k')+g('vic401k')+g('chaseRoth')+g('vicRoth')+g('fidelityBrok')+g('robinhood')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-debt-total','−$'+(g('aidvantage')+g('edfinancial')+g('ecsi')+g('ufcom')+g('auto')+g('furniture')+g('mortgage')).toLocaleString('en-US',{maximumFractionDigits:0}));t('sec-income-total','$'+(g('chaseGross')+g('vicGross')).toLocaleString('en-US',{maximumFractionDigits:0})+'/mo');}
 
 // Settings
 function renderCardProfiles(){document.getElementById('card-profiles-list').innerHTML=Object.entries(CARD_PROFILES).map(([,p])=>`<div class="card-profile-row"><div class="card-profile-dot" style="background:${p.color}"></div><div style="flex:1"><div class="card-profile-name">${p.label}</div><div class="card-profile-meta">${p.filenameKeys.slice(0,3).join(', ')}${p.paidFrom?' · Paid from: '+p.paidFrom:''}</div></div><span class="card-profile-owner owner-${p.isBank?'bank':p.owner.toLowerCase()}">${p.isBank?'Bank':p.owner}</span></div>`).join('');}
@@ -3826,14 +3837,14 @@ function getYtdContributions(){
   }
   return {
     chase: {
-      retirement: g('chase403bContrib'),      // already emp+er from parser
+      retirement: g('chase403bContrib')+g('chaseNM401kContrib'),  // old (dormant) + new employer plan
       roth:       g('chaseRothContrib'),
       hsa:        hsaEmp + hsaEr,             // Chase is the HSA holder
       hsaEmp, hsaEr
     },
     victoria: {
       retirement: g('vic401kContrib'),        // emp+er when parsed
-      roth:       g('vicRothContrib'),
+      roth:       g('vicRothContrib')+g('vicMegaBackdoorContrib'),  // Backdoor + Mega Backdoor, both after-tax Roth per plan doc
       hsa:        0,
       hsaEmp:0, hsaEr:0
     },
@@ -3849,8 +3860,8 @@ function renderInvestmentsTab(){
   const fmtM=n=>n>0?'+$'+n.toLocaleString('en-US',{maximumFractionDigits:0}):'—';
   const setT=(id,v,col)=>{const el=document.getElementById(id);if(el){el.textContent=v;if(col)el.style.color=col;}};
 
-  const c403b=g('chase403b'),v401k=g('vic401k'),cRoth=g('chaseRoth'),vRoth=g('vicRoth'),fibrok=g('fidelityBrok'),rh=g('robinhood'),hsa=g('hsa');
-  const employer=c403b+v401k,roth=cRoth+vRoth,brok=fibrok+rh,total=employer+roth+brok;
+  const c403b=g('chase403b'),cNM401k=g('chaseNM401k'),v401k=g('vic401k'),cRoth=g('chaseRoth'),vRoth=g('vicRoth'),fibrok=g('fidelityBrok'),rh=g('robinhood'),hsa=g('hsa');
+  const employer=c403b+cNM401k+v401k,roth=cRoth+vRoth,brok=fibrok+rh,total=employer+roth+brok;
 
   setT('inv-total',fmt(total+hsa));
   setT('inv-employer',fmt(employer));
@@ -3872,7 +3883,7 @@ function renderInvestmentsTab(){
   renderContribProgress();
 
   // Account details
-  setT('inv-det-403b',fmt(c403b));setT('inv-det-401k',fmt(v401k));
+  setT('inv-det-403b',fmt(c403b));setT('inv-det-nm401k',fmt(cNM401k));setT('inv-det-401k',fmt(v401k));
   setT('inv-det-croth',fmt(cRoth));setT('inv-det-vroth',fmt(vRoth));
   setT('inv-det-fibrok',fmt(fibrok));setT('inv-det-rh',fmt(rh));
   setT('inv-det-hsa',fmt(hsa));
