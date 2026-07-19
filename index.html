@@ -280,6 +280,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
           <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px" id="mf-hub-balance">—</div>
         </div>
         <div style="text-align:center;color:var(--dim);font-size:18px;line-height:1;margin:6px 0">↓</div>
+        <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--danger);margin-bottom:8px">
+          <div style="font-size:9px;color:var(--danger);text-transform:uppercase;letter-spacing:0.5px;font-weight:600">Loans — Avalanche Payoff</div>
+          <div style="font-size:10px;color:var(--dim);margin:2px 0">Aidvantage · Vic DLUNSUB (RAP) · Selby · LDS-Medicine · Auto</div>
+          <div style="font-size:12px;font-weight:600;font-family:'DM Mono',monospace" id="mf-loans-balance">—</div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div style="background:var(--elevated);border-radius:var(--radius-sm);padding:10px;border:1px solid var(--border)">
             <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Keybank</div>
@@ -3790,10 +3795,12 @@ function updateDashboard(){
 }
 
 function renderMoneyFlow(){
-  const a=STATE.accounts,g=v=>(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
+  const a=STATE.accounts,g=v=>(v==='auto'&&a.autoPaidOff)?0:(typeof a[v]==='number'?a[v]:(parseFloat(a[v])||0));
   const fmt=n=>'$'+n.toLocaleString('en-US',{maximumFractionDigits:0});
   const setT=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   setT('mf-hub-balance',fmt(g('co360')));
+  const loansTotal=g('aidvantage')+g('edfinancial')+g('ecsi')+g('ufcom')+g('auto');
+  setT('mf-loans-balance',fmt(loansTotal)+' remaining');
   setT('mf-keybank-balance',fmt(g('keybank')));
   setT('mf-ally-balance',fmt(g('emergFund')));
   setT('mf-capOneChase-balance',fmt(g('capOneChase')));
