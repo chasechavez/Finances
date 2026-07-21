@@ -2091,7 +2091,7 @@ function mergeInvestAccount(key,meta,newTxns){
 
 function processInvCSV(invType,csvText,filename){
   const results=[];
-  const acctNumFromFile=fn=>{const m=fn.match(/(\d{6,12})/);return m?m[1]:null;};
+  const acctNumFromFile=fn=>{const m=fn.match(/([A-Z]?\d{6,12})/i);return m?m[1].toUpperCase():null;};
   if(invType==='fidelityMulti'){
     const accounts=parseFidelityMultiCSV(csvText);
     for(const acct of accounts){const meta=INV_ACCT_MAP[acct.accountNumber]||{label:`Fidelity ${acct.accountType}`,owner:'Chase',type:acct.accountType,color:'#38bdf8'};const key=`fidelity_${acct.accountNumber}`;const added=mergeInvestAccount(key,{...meta,accountNumber:acct.accountNumber,custodian:'Fidelity'},acct.transactions);results.push({label:meta.label,added});}
